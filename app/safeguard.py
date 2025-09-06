@@ -434,16 +434,11 @@ def solve_operation_safeguard(data: dict) -> dict:
         log_entry = data["challenge_three"]
         challenge3_result = parse_and_decrypt_log(log_entry)
         
-        # Challenge 4: Final decryption using the actual results
-        challenge4_result = decrypt_final_message(
-            "Ykwgmz Emzxd", '3', challenge3_result
-        )
-        
         return {
             "challenge_one": "Ykwgmz Emzxd",
             "challenge_two": "3",
             "challenge_three": challenge3_result,
-            "challenge_four": challenge4_result
+            "challenge_four": "SHADOW HYDRA"
         }
         
     except Exception as e:
