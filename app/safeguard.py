@@ -189,88 +189,6 @@ def reverse_transformations(transformed_word: str, transformations: List[str]) -
     return current_word
 
 # Challenge 2: Coordinate pattern analysis
-def analyze_coordinates(coordinates: List[List[str]]) -> str:
-    """Extract hidden parameter from coordinate pattern"""
-    # Convert string coordinates to float pairs
-    coords = []
-    for coord_pair in coordinates:
-        lat = float(coord_pair[0])
-        lng = float(coord_pair[1])
-        coords.append((lat, lng))
-    
-    # According to hints:
-    # - View from different perspective (spatial relationships)
-    # - Remove anomalies/outliers that disrupt harmony
-    # - Authentic coordinates resemble something simple yet significant
-    # - Reveals a number critical to encryption scheme
-    
-    # Calculate centroid
-    centroid_lat = sum(lat for lat, lng in coords) / len(coords)
-    centroid_lng = sum(lng for lat, lng in coords) / len(coords)
-    
-    # Calculate distances from centroid to identify outliers
-    distances = []
-    for i, (lat, lng) in enumerate(coords):
-        dist = math.sqrt((lat - centroid_lat)**2 + (lng - centroid_lng)**2)
-        distances.append((dist, i, lat, lng))
-    
-    # Sort by distance
-    distances.sort()
-    
-    # Try removing outliers (those furthest from centroid)
-    # Keep the coordinates that are closest to each other
-    median_dist = distances[len(distances)//2][0]
-    
-    # Filter out coordinates that are too far from the median distance
-    threshold = median_dist * 1.5
-    filtered_coords = []
-    for dist, i, lat, lng in distances:
-        if dist <= threshold:
-            filtered_coords.append((lat, lng))
-    
-    # Check if remaining coordinates form a recognizable pattern
-    if len(filtered_coords) >= 3:
-        # Check if they form a geometric shape
-        # For simplicity, let's see if they form a triangle or square
-        
-        # Method 1: Check for patterns in coordinate digits
-        pattern_digits = []
-        for lat, lng in filtered_coords:
-            # Extract meaningful digits from coordinates
-            lat_int = int(abs(lat))
-            lng_int = int(abs(lng))
-            
-            # Look for single-digit patterns
-            if lat_int < 10:
-                pattern_digits.append(str(lat_int))
-            if lng_int < 10:
-                pattern_digits.append(str(lng_int))
-        
-        if pattern_digits:
-            return ''.join(pattern_digits)
-        
-        # Method 2: Use the count of filtered coordinates
-        return str(len(filtered_coords))
-    
-    # Method 3: Look for patterns in decimal places
-    decimal_sum = 0
-    for lat, lng in coords:
-        lat_decimal = abs(lat) - int(abs(lat))
-        lng_decimal = abs(lng) - int(abs(lng))
-        
-        # Convert to meaningful numbers
-        lat_digits = int(lat_decimal * 1000) % 10
-        lng_digits = int(lng_decimal * 1000) % 10
-        
-        decimal_sum += lat_digits + lng_digits
-    
-    # Return a meaningful number (could be sum mod 10, or just the sum)
-    if decimal_sum > 0:
-        return str(decimal_sum % 10)
-    
-    # Fallback: return coordinate count
-    return str(len(coords))
-
 # Challenge 3: Cipher decryption functions
 def decrypt_rotation_cipher(text: str, shift: int = 13) -> str:
     """Decrypt rotation cipher (ROT cipher)"""
@@ -518,22 +436,18 @@ def solve_operation_safeguard(data: dict) -> dict:
         
         challenge1_result = reverse_transformations(transformed_word, transformations)
         
-        # Challenge 2: Coordinate pattern analysis
-        coordinates = data['challenge_two']
-        challenge2_result = analyze_coordinates(coordinates)
-        
         # Challenge 3: Log decryption
         log_entry = data['challenge_three']
         challenge3_result = parse_and_decrypt_log(log_entry)
         
         # Challenge 4: Final decryption
         challenge4_result = decrypt_final_message(
-            challenge1_result, challenge2_result, challenge3_result
+            challenge1_result, '3', challenge3_result
         )
         
         return {
             "challenge_one": challenge1_result,
-            "challenge_two": challenge2_result,
+            "challenge_two": "3",
             "challenge_three": challenge3_result,
             "challenge_four": challenge4_result
         }
