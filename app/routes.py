@@ -1323,27 +1323,6 @@ def mst_calculation():
         return jsonify({'error': str(e)}), 500
 
 #######################################---SAILING---#############################################
-# def merge_intervals(intervals):
-#     """
-#     Merge overlapping intervals and return sorted result.
-#     """
-#     if not intervals:
-#         return []
-    
-#     # Sort intervals by start time
-#     intervals.sort(key=lambda x: x[0])
-    
-#     merged = []
-#     for start, end in intervals:
-#         # If merged is empty or current interval doesn't overlap with the last one
-#         if not merged or merged[-1][1] < start:
-#             merged.append([start, end])
-#         else:
-#             # Overlapping intervals, merge them
-#             merged[-1][1] = max(merged[-1][1], end)
-    
-#     return merged
-
 def min_boats_needed(intervals):
     """
     Find minimum number of boats needed using sweep line algorithm.
@@ -1363,40 +1342,29 @@ def min_boats_needed(intervals):
     current_boats = 0
     max_boats = 0
     
-    for time, delta in events:
+    for _, delta in events:
         current_boats += delta
         max_boats = max(max_boats, current_boats)
     
     return max_boats
 
-def validate_booking(booking):
-    """Validate that booking is a list of two integers"""
-    if not isinstance(booking, list) or len(booking) != 2:
-        return False
-    if not all(isinstance(x, (int, float)) for x in booking):
-        return False
-    if booking[0] > booking[1]:
-        return False
-    return True
-
-# In your merge_intervals function, add validation:
 def merge_intervals(intervals):
+    """
+    Merge overlapping intervals and return sorted result.
+    """
     if not intervals:
         return []
     
-    # Filter out invalid intervals
-    valid_intervals = [interval for interval in intervals if validate_booking(interval)]
-    
-    if not valid_intervals:
-        return []
-    
-    valid_intervals.sort(key=lambda x: x[0])
+    # Sort intervals by start time
+    intervals.sort(key=lambda x: x[0])
     
     merged = []
-    for start, end in valid_intervals:
+    for start, end in intervals:
+        # If merged is empty or current interval doesn't overlap with the last one
         if not merged or merged[-1][1] < start:
             merged.append([start, end])
         else:
+            # Overlapping intervals, merge them
             merged[-1][1] = max(merged[-1][1], end)
     
     return merged
@@ -1405,17 +1373,14 @@ def merge_intervals(intervals):
 def sailing_club_submission():
     try:
         data = request.get_json()
-        if data is None:
-            return jsonify({"error": "Invalid JSON or missing Content-Type header"}), 400
         
-        test_cases = data.get('testCases', [])
-        
+        test_cases = data['testCases']
         solutions = []
         
         for test_case in test_cases:
-            test_id = test_case.get('id')
-            bookings = test_case.get('input', [])
-            
+            test_id = test_case['id']
+            bookings = test_case['input']
+
             if test_id is None:
                 continue
                 
@@ -1438,7 +1403,7 @@ def sailing_club_submission():
         # Log the error for debugging
         print(f"Error in sailing_club_submission: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
-
+    
 #######################################---DUOLINGO---#############################################
 @main_bp.route('/duolingo-sort', methods=['POST'])
 def duolingo_sort():
@@ -1869,3 +1834,153 @@ def handle_2048():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+#######################################---The Ink Archive---#############################################
+@main_bp.route('/The-Ink-Archive', methods=['POST'])
+def the_ink_archive():
+    """
+    Solve the trading cycle problems:
+    1. Find a cycle with product > 1 (positive sum in log space)
+    2. Find a cycle with maximum product (maximum sum in log space)
+    """
+    try:
+        data = request.get_json()
+        if not data or len(data) != 2:
+            return jsonify({'error': 'Expected array with exactly 2 elements'}), 400
+        
+        result = []
+        
+        for i, graph_data in enumerate(data):
+            ratios = graph_data['ratios']
+            goods = graph_data['goods']
+            n = len(goods)
+            
+            # Build graph with logarithmic weights
+            # For product > 1, we need sum of logs > 0
+            # For maximum product, we need maximum sum of logs
+            graph = build_log_graph(ratios, n)
+            cycle_path = find_maximum_cycle(graph, n, goods)
+
+            if cycle_path:
+                # Calculate the actual gain
+                gain = calculate_gain(cycle_path, ratios, goods)
+                result.append({
+                    'path': cycle_path,
+                    'gain': (gain - 1) * 100  # Convert to percentage
+                })
+            else:
+                result.append({
+                    'path': [],
+                    'gain': 0
+                })
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def build_log_graph(ratios, n):
+    """
+    Build a graph with logarithmic weights.
+    ratios is a list of [from, to, rate] triplets.
+    Returns adjacency list representation.
+    """
+    graph = defaultdict(list)
+    
+    for ratio in ratios:
+        from_idx, to_idx, rate = int(ratio[0]), int(ratio[1]), float(ratio[2])
+        if rate > 0:  # Only positive rates make sense
+            log_weight = math.log(rate)
+            graph[from_idx].append((to_idx, log_weight, rate))
+    
+    return graph
+
+
+def find_maximum_cycle(graph, n, goods):
+    """
+    Find a cycle with maximum sum of logarithmic weights (maximum product).
+    Uses a modified approach to find the cycle with maximum weight.
+    """
+    best_cycle = None
+    best_sum = float('-inf')
+    
+    # Try all possible cycles using DFS with cycle detection
+    for start in range(n):
+        if start in graph:
+            cycle, cycle_sum = find_best_cycle_from_node(graph, start, n)
+            if cycle and cycle_sum > best_sum:
+                best_sum = cycle_sum
+                best_cycle = cycle
+    
+    if best_cycle:
+        return [goods[node] for node in best_cycle]
+    
+    return None
+
+
+def find_best_cycle_from_node(graph, start, n, max_depth=10):
+    """
+    Find the best cycle starting from a given node using DFS.
+    """
+    best_cycle = None
+    best_sum = float('-inf')
+    
+    def dfs(current, path, path_sum, visited):
+        nonlocal best_cycle, best_sum
+        
+        if len(path) > max_depth:  # Avoid infinite recursion
+            return
+        
+        if current in graph:
+            for neighbor, log_weight, _ in graph[current]:
+                if neighbor == start and len(path) > 1:
+                    # Found a cycle back to start
+                    cycle_sum = path_sum + log_weight
+                    if cycle_sum > best_sum:
+                        best_sum = cycle_sum
+                        best_cycle = path + [start]
+                elif neighbor not in visited and len(path) < max_depth:
+                    # Continue DFS
+                    visited.add(neighbor)
+                    dfs(neighbor, path + [neighbor], path_sum + log_weight, visited)
+                    visited.remove(neighbor)
+    
+    visited = {start}
+    dfs(start, [start], 0, visited)
+    
+    return best_cycle, best_sum
+
+def calculate_gain(cycle_path, ratios, goods):
+    """
+    Calculate the actual gain for a given cycle path.
+    """
+    if len(cycle_path) < 2:
+        return 1.0
+    
+    # Create a mapping from goods to indices
+    goods_to_idx = {good: i for i, good in enumerate(goods)}
+    
+    # Create a rate lookup dictionary
+    rate_map = {}
+    for ratio in ratios:
+        from_idx, to_idx, rate = int(ratio[0]), int(ratio[1]), float(ratio[2])
+        rate_map[(from_idx, to_idx)] = rate
+    
+    # Calculate total gain
+    total_gain = 1.0
+    for i in range(len(cycle_path) - 1):
+        from_good = cycle_path[i]
+        to_good = cycle_path[i + 1]
+        
+        from_idx = goods_to_idx[from_good]
+        to_idx = goods_to_idx[to_good]
+        
+        if (from_idx, to_idx) in rate_map:
+            total_gain *= rate_map[(from_idx, to_idx)]
+        else:
+            # This shouldn't happen if the cycle is valid
+            return 1.0
+    
+    return total_gain
