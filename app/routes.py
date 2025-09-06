@@ -1554,47 +1554,49 @@ def trading_bot():
 #######################################---2048---#############################################
 def process_2048_move(grid, direction):
     """
-    Process a 2048 move and return the new grid and end game status.
-    Creates new grids without modifying the original.
+    Process a 2048 move for any grid size
     """
-    # Create a new grid from the input
+    if not grid or not isinstance(grid, list):
+        return grid, None
+    
+    rows = len(grid)
+    cols = len(grid[0]) if rows > 0 else 0
+    
     next_grid = [[cell for cell in row] for row in grid]
     moved = False
     
-    # Process the move based on direction
+    # Process move based on direction and grid size
     if direction == "LEFT":
-        next_grid, moved = move_left(next_grid)
+        moved = move_left(next_grid, rows, cols)
     elif direction == "RIGHT":
-        next_grid, moved = move_right(next_grid)
+        moved = move_right(next_grid, rows, cols)
     elif direction == "UP":
-        next_grid, moved = move_up(next_grid)
+        moved = move_up(next_grid, rows, cols)
     elif direction == "DOWN":
-        next_grid, moved = move_down(next_grid)
+        moved = move_down(next_grid, rows, cols)
     
-    # Only add new tile if the grid changed and there's space
-    if moved and has_empty_cell(next_grid):
-        next_grid = add_random_tile(next_grid)
+    # Only add new tile if grid changed AND there's space
+    if moved and has_empty_cell(next_grid, rows, cols):
+        next_grid = add_random_tile(next_grid, rows, cols)
     
-    # Check game status
-    end_game = check_game_status(next_grid)
-    
+    end_game = check_game_status(next_grid, rows, cols)
     return next_grid, end_game
 
-def move_left(grid):
-    """Move and merge tiles to the left, return new grid and moved status"""
+
+def move_left(grid, rows, cols):
+    """Move and merge tiles to the left for any grid size"""
     moved = False
-    new_grid = []
-    
-    for i in range(4):
-        # Remove None values and process the row
-        row = [x for x in grid[i] if x is not None]
+    for i in range(rows):
+        # Remove None values and invalid values (0 or negative)
+        row = [x for x in grid[i] if x is not None and x > 0]
         new_row = []
         j = 0
         
         while j < len(row):
             if j + 1 < len(row) and row[j] == row[j + 1]:
                 # Merge tiles
-                new_row.append(row[j] * 2)
+                merged_value = row[j] * 2
+                new_row.append(merged_value)
                 j += 2
                 moved = True
             else:
@@ -1602,30 +1604,29 @@ def move_left(grid):
                 j += 1
         
         # Pad with None values
-        new_row.extend([None] * (4 - len(new_row)))
-        new_grid.append(new_row)
+        new_row.extend([None] * (cols - len(new_row)))
         
         # Check if row changed
         if grid[i] != new_row:
             moved = True
+            grid[i] = new_row
     
-    return new_grid, moved
+    return moved
 
-def move_right(grid):
-    """Move and merge tiles to the right, return new grid and moved status"""
+def move_right(grid, rows, cols):
+    """Move and merge tiles to the right for any grid size"""
     moved = False
-    new_grid = []
-    
-    for i in range(4):
-        # Remove None values and process the row (reverse for right movement)
-        row = [x for x in grid[i] if x is not None]
+    for i in range(rows):
+        # Remove None values and invalid values
+        row = [x for x in grid[i] if x is not None and x > 0]
         new_row = []
         j = len(row) - 1
         
         while j >= 0:
             if j - 1 >= 0 and row[j] == row[j - 1]:
                 # Merge tiles
-                new_row.insert(0, row[j] * 2)
+                merged_value = row[j] * 2
+                new_row.insert(0, merged_value)
                 j -= 2
                 moved = True
             else:
@@ -1633,30 +1634,32 @@ def move_right(grid):
                 j -= 1
         
         # Pad with None values at the beginning
-        new_row = [None] * (4 - len(new_row)) + new_row
-        new_grid.append(new_row)
+        new_row = [None] * (cols - len(new_row)) + new_row
         
         # Check if row changed
         if grid[i] != new_row:
             moved = True
+            grid[i] = new_row
     
-    return new_grid, moved
+    return moved
 
-def move_up(grid):
-    """Move and merge tiles upward, return new grid and moved status"""
+def move_up(grid, rows, cols):
+    """Move and merge tiles upward for any grid size"""
     moved = False
-    new_grid = [[None] * 4 for _ in range(4)]
+    # Create a new grid with the same structure
+    new_grid = [[None] * cols for _ in range(rows)]
     
-    for j in range(4):
-        # Get column
-        col = [grid[i][j] for i in range(4) if grid[i][j] is not None]
+    for j in range(cols):
+        # Get column, filtering out None and invalid values
+        col = [grid[i][j] for i in range(rows) if grid[i][j] is not None and grid[i][j] > 0]
         new_col = []
         i = 0
         
         while i < len(col):
             if i + 1 < len(col) and col[i] == col[i + 1]:
                 # Merge tiles
-                new_col.append(col[i] * 2)
+                merged_value = col[i] * 2
+                new_col.append(merged_value)
                 i += 2
                 moved = True
             else:
@@ -1664,31 +1667,39 @@ def move_up(grid):
                 i += 1
         
         # Pad with None values
-        new_col.extend([None] * (4 - len(new_col)))
+        new_col.extend([None] * (rows - len(new_col)))
         
-        # Update column and check if changed
-        for idx in range(4):
+        # Update column in new grid
+        for idx in range(rows):
             new_grid[idx][j] = new_col[idx]
+            # Check if value changed
             if grid[idx][j] != new_col[idx]:
                 moved = True
     
-    return new_grid, moved
-
-def move_down(grid):
-    """Move and merge tiles downward, return new grid and moved status"""
-    moved = False
-    new_grid = [[None] * 4 for _ in range(4)]
+    # Update the original grid
+    for i in range(rows):
+        for j in range(cols):
+            grid[i][j] = new_grid[i][j]
     
-    for j in range(4):
-        # Get column (reverse for downward movement)
-        col = [grid[i][j] for i in range(4) if grid[i][j] is not None]
+    return moved
+
+def move_down(grid, rows, cols):
+    """Move and merge tiles downward for any grid size"""
+    moved = False
+    # Create a new grid with the same structure
+    new_grid = [[None] * cols for _ in range(rows)]
+    
+    for j in range(cols):
+        # Get column, filtering out None and invalid values
+        col = [grid[i][j] for i in range(rows) if grid[i][j] is not None and grid[i][j] > 0]
         new_col = []
         i = len(col) - 1
         
         while i >= 0:
             if i - 1 >= 0 and col[i] == col[i - 1]:
                 # Merge tiles
-                new_col.insert(0, col[i] * 2)
+                merged_value = col[i] * 2
+                new_col.insert(0, merged_value)
                 i -= 2
                 moved = True
             else:
@@ -1696,79 +1707,105 @@ def move_down(grid):
                 i -= 1
         
         # Pad with None values at the beginning
-        new_col = [None] * (4 - len(new_col)) + new_col
+        new_col = [None] * (rows - len(new_col)) + new_col
         
-        # Update column and check if changed
-        for idx in range(4):
+        # Update column in new grid
+        for idx in range(rows):
             new_grid[idx][j] = new_col[idx]
+            # Check if value changed
             if grid[idx][j] != new_col[idx]:
                 moved = True
     
-    return new_grid, moved
+    # Update the original grid
+    for i in range(rows):
+        for j in range(cols):
+            grid[i][j] = new_grid[i][j]
+    
+    return moved
 
-def has_empty_cell(grid):
-    """Check if there's at least one empty cell"""
-    for i in range(4):
-        for j in range(4):
+def has_empty_cell(grid, rows, cols):
+    """Check if there's at least one empty cell for any grid size"""
+    for i in range(rows):
+        for j in range(cols):
             if grid[i][j] is None:
                 return True
     return False
 
-def add_random_tile(grid):
-    """Add a random tile (2 with 90% chance, 4 with 10% chance) to empty cell"""
-    # Create a copy of the grid
-    new_grid = [[cell for cell in row] for row in grid]
+def add_random_tile(grid, rows, cols):
+    """Add a random tile to empty cell for any grid size"""
     empty_cells = []
-    
-    for i in range(4):
-        for j in range(4):
-            if new_grid[i][j] is None:
+    for i in range(rows):
+        for j in range(cols):
+            if grid[i][j] is None:
                 empty_cells.append((i, j))
     
     if empty_cells:
         i, j = random.choice(empty_cells)
-        new_grid[i][j] = 2 if random.random() < 0.9 else 4
+        grid[i][j] = 2 if random.random() < 0.9 else 4
     
-    return new_grid
+    return grid
 
-def check_game_status(grid):
-    """Check if game is won, lost, or still ongoing"""
+def check_game_status(grid, rows, cols):
+    """Check if game is won, lost, or still ongoing for any grid size"""
     # Check for win (2048 tile)
-    for i in range(4):
-        for j in range(4):
+    for i in range(rows):
+        for j in range(cols):
             if grid[i][j] == 2048:
                 return 'win'
     
     # Check if there are empty cells
-    if has_empty_cell(grid):
+    if has_empty_cell(grid, rows, cols):
         return None
     
     # Check if any moves are possible (adjacent tiles with same value)
-    for i in range(4):
-        for j in range(4):
+    for i in range(rows):
+        for j in range(cols):
             current = grid[i][j]
+            if current is None:
+                continue
             # Check right neighbor
-            if j < 3 and grid[i][j + 1] == current:
+            if j < cols - 1 and grid[i][j + 1] == current:
                 return None
             # Check bottom neighbor
-            if i < 3 and grid[i + 1][j] == current:
+            if i < rows - 1 and grid[i + 1][j] == current:
                 return None
     
     # No moves possible
     return 'lose'
 
+def sanitize_grid(grid):
+    """Convert any invalid values to None for any grid size"""
+    if not grid or not isinstance(grid, list):
+        return [[]]
+    
+    rows = len(grid)
+    if rows == 0:
+        return [[]]
+    
+    cols = len(grid[0])
+    sanitized = []
+    
+    for i in range(rows):
+        new_row = []
+        for j in range(cols):
+            value = grid[i][j]
+            # Keep only positive numbers and None
+            if value is None or (isinstance(value, (int, float)) and value > 0):
+                new_row.append(value)
+            else:
+                new_row.append(None)
+        sanitized.append(new_row)
+    
+    return sanitized
+
 @main_bp.route('/2048', methods=['POST'])
 def handle_2048():
     try:
-        # Get raw data and parse it manually
-        if not request.data:
-            return jsonify({"error": "No data received"}), 400
-        
-        # Parse JSON manually
+        # Parse JSON data
         try:
             data = json.loads(request.data)
         except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON"}), 400
+            return jsonify({"error": "Invalid JSON data"}), 400
         
         grid = data.get('grid')
         merge_direction = data.get('mergeDirection')
@@ -1777,14 +1814,21 @@ def handle_2048():
         if not grid or not merge_direction:
             return jsonify({"error": "Missing grid or mergeDirection"}), 400
         
-        # Process the move and generate next grid
+        # Sanitize input grid (convert invalid values to None)
+        grid = sanitize_grid(grid)
+        
+        # Process the move
         next_grid, end_game = process_2048_move(grid, merge_direction)
         
-        # Return the response expected by the front-end
-        return jsonify({
+        # Sanitize output grid
+        next_grid = sanitize_grid(next_grid)
+        
+        response = jsonify({
             "nextGrid": next_grid,
             "endGame": end_game
         })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
