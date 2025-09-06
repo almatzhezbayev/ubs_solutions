@@ -15,10 +15,13 @@ import cv2
 import io
 import networkx as nx
 
+from app.grids_2048 import process_2048_move
+import json
+
 main_bp = Blueprint('main', __name__)
 
 # Simple test route
-@main_bp.route('/')
+@main_bp.route('/healthz')
 def home():
     return jsonify({
         'message': 'Welcome to Flask Backend! 123 ubs',
@@ -1385,7 +1388,7 @@ def merge_intervals(intervals):
     
     return merged
 
-@main_bp.route('/sailing-club', methods=['POST'])
+@main_bp.route('/', methods=['POST'])
 def sailing_club_submission():
     try:
         data = request.get_json()
@@ -2210,3 +2213,41 @@ def calculate_gain(cycle_path, ratios, goods):
             return 1.0
     
     return total_gain
+
+
+#######################################---2048---#############################################
+@main_bp.route('/2048', methods=['POST', 'OPTIONS'])
+def handle_2048():
+    try:
+        # Handle CORS preflight
+        if request.method == 'OPTIONS':
+            response = jsonify({"status": "ok"})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST')
+            return response
+        
+        # Parse JSON
+        try:
+            data = json.loads(request.data)
+        except json.JSONDecodeError:
+            return jsonify({"error": "Invalid JSON"}), 400
+        
+        grid = data.get('grid')
+        direction = data.get('mergeDirection')
+        
+        if not grid or not direction:
+            return jsonify({"error": "Missing grid or direction"}), 400
+        
+        # Process the move
+        next_grid, end_game = process_2048_move(grid, direction)
+        
+        response = jsonify({
+            "nextGrid": next_grid,
+            "endGame": end_game
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
