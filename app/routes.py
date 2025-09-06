@@ -496,91 +496,98 @@ def chase_the_flag_main():
 #######################################---investigate---#############################################
 def find_extra_connections(edges):
     """
-    Find extra connections in a network that has exactly one cycle.
-    Uses Union-Find (Disjoint Set Union) to detect cycles and find redundant edges.
+    Find all edges that form the single cycle in a network.
+    Uses DFS to detect and extract the complete cycle.
     """
-    # Build graph and prepare for union-find
-    parent = {}
-    rank = {}
+    # Build adjacency list representation of the graph
+    graph = defaultdict(list)
+    edge_map = {}  # To quickly find edge objects by node pairs
     
-    def find(x):
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-    
-    def union(x, y):
-        rx = find(x)
-        ry = find(y)
-        if rx == ry:
-            return True  # Cycle detected
-        if rank[rx] < rank[ry]:
-            parent[rx] = ry
-        elif rank[rx] > rank[ry]:
-            parent[ry] = rx
-        else:
-            parent[ry] = rx
-            rank[rx] += 1
-        return False
-    
-    # Initialize union-find data structure
-    nodes = set()
-    for edge in edges:
-        nodes.add(edge["spy1"])
-        nodes.add(edge["spy2"])
-    
-    for node in nodes:
-        parent[node] = node
-        rank[node] = 0
-    
-    # Find redundant edges (edges that create cycles)
-    redundant_edges = []
     for edge in edges:
         spy1, spy2 = edge["spy1"], edge["spy2"]
-        if union(spy1, spy2):
-            redundant_edges.append(edge)
+        graph[spy1].append(spy2)
+        graph[spy2].append(spy1)
+        # Store edge in both directions for easy lookup
+        edge_map[(spy1, spy2)] = edge
+        edge_map[(spy2, spy1)] = edge
     
-    return redundant_edges
+    # Find cycle using DFS
+    def find_cycle_dfs(start):
+        visited = set()
+        parent = {}
+        cycle_edges = []
+        
+        def dfs(node, par):
+            visited.add(node)
+            parent[node] = par
+            
+            for neighbor in graph[node]:
+                if neighbor == par:  # Skip the edge we came from
+                    continue
+                    
+                if neighbor in visited:
+                    # Found a cycle! Trace back to get all cycle edges
+                    cycle_nodes = []
+                    current = node
+                    cycle_nodes.append(neighbor)  # Add the neighbor that created the cycle
+                    cycle_nodes.append(current)
+                    
+                    # Trace back until we reach the neighbor again
+                    while current != neighbor:
+                        current = parent[current]
+                        cycle_nodes.append(current)
+                    
+                    # Convert cycle nodes to edges
+                    for i in range(len(cycle_nodes) - 1):
+                        node1, node2 = cycle_nodes[i], cycle_nodes[i + 1]
+                        if (node1, node2) in edge_map:
+                            cycle_edges.append(edge_map[(node1, node2)])
+                        else:
+                            cycle_edges.append(edge_map[(node2, node1)])
+                    
+                    return True
+                else:
+                    if dfs(neighbor, node):
+                        return True
+            return False
+        
+        if dfs(start, None):
+            return cycle_edges
+        return []
+    
+    # Start DFS from any node to find the cycle
+    if not graph:
+        return []
+    
+    start_node = next(iter(graph.keys()))
+    cycle_edges = find_cycle_dfs(start_node)
+    
+    return cycle_edges
 
 @main_bp.route('/investigate', methods=['POST'])
 def investigate():
     """
     Detect extra connections in spy networks that create cycles.
     """
-    try:
-        data = request.get_json()
-        print("INVESTIGATE data:", data)
-        # Handle the input format: it's an array of networks
-        if isinstance(data, list):
-            networks = data
-        else:
-            # Fallback: try to get networks from 'networks' key
-            networks = data.get('networks', [])
+    data = request.get_json()
+    
+    result_networks = []
+    
+    for network_data in data:
+        network_id = network_data['networkId']
+        edges = network_data['network']
+
+        # Find the extra connections in this network
+        extra_connections = find_extra_connections(edges)
         
-        result_networks = []
-        
-        for network_data in networks:
-            network_id = network_data.get('networkId')
-            edges = network_data.get('network', [])
-            
-            # Find the extra connections in this network
-            extra_connections = find_extra_connections(edges)
-            
-            result_networks.append({
-                "networkId": network_id,
-                "extraChannels": extra_connections
-            })
-        
-        return jsonify({
-            "networks": result_networks
+        result_networks.append({
+            "networkId": network_id,
+            "extraChannels": extra_connections
         })
     
-    except Exception as e:
-        # Log the error for debugging
-        print(f"Error processing request: {str(e)}")
-        return jsonify({
-            "error": "Internal server error",
-            "message": str(e)
-        }), 500
+    return jsonify({
+        "networks": result_networks
+    })
 #######################################---SAFEGUARD---#############################################
 def mirror_words(x: str) -> str:
     """Reverse each word in the sentence"""
@@ -1311,26 +1318,26 @@ def mst_calculation():
         return jsonify({'error': str(e)}), 500
 
 #######################################---SAILING---#############################################
-def merge_intervals(intervals):
-    """
-    Merge overlapping intervals and return sorted result.
-    """
-    if not intervals:
-        return []
+# def merge_intervals(intervals):
+#     """
+#     Merge overlapping intervals and return sorted result.
+#     """
+#     if not intervals:
+#         return []
     
-    # Sort intervals by start time
-    intervals.sort(key=lambda x: x[0])
+#     # Sort intervals by start time
+#     intervals.sort(key=lambda x: x[0])
     
-    merged = []
-    for start, end in intervals:
-        # If merged is empty or current interval doesn't overlap with the last one
-        if not merged or merged[-1][1] < start:
-            merged.append([start, end])
-        else:
-            # Overlapping intervals, merge them
-            merged[-1][1] = max(merged[-1][1], end)
+#     merged = []
+#     for start, end in intervals:
+#         # If merged is empty or current interval doesn't overlap with the last one
+#         if not merged or merged[-1][1] < start:
+#             merged.append([start, end])
+#         else:
+#             # Overlapping intervals, merge them
+#             merged[-1][1] = max(merged[-1][1], end)
     
-    return merged
+#     return merged
 
 def min_boats_needed(intervals):
     """
@@ -1357,42 +1364,75 @@ def min_boats_needed(intervals):
     
     return max_boats
 
+def validate_booking(booking):
+    """Validate that booking is a list of two integers"""
+    if not isinstance(booking, list) or len(booking) != 2:
+        return False
+    if not all(isinstance(x, (int, float)) for x in booking):
+        return False
+    if booking[0] > booking[1]:
+        return False
+    return True
+
+# In your merge_intervals function, add validation:
+def merge_intervals(intervals):
+    if not intervals:
+        return []
+    
+    # Filter out invalid intervals
+    valid_intervals = [interval for interval in intervals if validate_booking(interval)]
+    
+    if not valid_intervals:
+        return []
+    
+    valid_intervals.sort(key=lambda x: x[0])
+    
+    merged = []
+    for start, end in valid_intervals:
+        if not merged or merged[-1][1] < start:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+    
+    return merged
+
 @main_bp.route('/sailing-club', methods=['POST'])
 def sailing_club_submission():
-    """
-    Solve the sailing club booking problem.
-    Part 1: Merge overlapping booking intervals
-    Part 2: Find minimum number of boats needed
-    """
-    data = request.get_json()
-    test_cases = data.get('testCases', [])
-    
-    solutions = []
-    
-    for test_case in test_cases:
-        test_id = test_case['id']
-        bookings = test_case['input']
-        print(test_case)
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON or missing Content-Type header"}), 400
         
-        # Part 1: Merge overlapping intervals
-        sorted_merged_slots = merge_intervals(bookings)
+        test_cases = data.get('testCases', [])
         
-        # Part 2: Find minimum boats needed
-        min_boats = min_boats_needed(bookings)
+        solutions = []
         
-        solution = {
-            "id": test_id,
-            "sortedMergedSlots": sorted_merged_slots,
-            "minBoatsNeeded": min_boats
-        }
-        print(solution)
-
-        solutions.append(solution)
+        for test_case in test_cases:
+            test_id = test_case.get('id')
+            bookings = test_case.get('input', [])
+            
+            if test_id is None:
+                continue
+                
+            # Part 1: Merge overlapping intervals
+            sorted_merged_slots = merge_intervals(bookings)
+            
+            # Part 2: Find minimum boats needed
+            min_boats = min_boats_needed(bookings)
+            
+            solution = {
+                "id": test_id,
+                "sortedMergedSlots": sorted_merged_slots,
+                "minBoatsNeeded": min_boats
+            }
+            solutions.append(solution)
+        
+        return jsonify({"solutions": solutions})
     
-    return jsonify({
-        "solutions": solutions
-    })
-
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error in sailing_club_submission: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 #######################################---DUOLINGO---#############################################
 def roman_to_int(s):
@@ -1410,7 +1450,7 @@ def roman_to_int(s):
     
     return total
 
-# English word to number conversion
+# English word to number conversion (improved)
 def english_to_int(s):
     word_to_num = {
         'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
@@ -1422,7 +1462,7 @@ def english_to_int(s):
         'hundred': 100, 'thousand': 1000, 'million': 1000000
     }
     
-    words = s.lower().split()
+    words = s.lower().replace('-', ' ').split()
     total = 0
     current = 0
     
@@ -1430,80 +1470,95 @@ def english_to_int(s):
         if word in word_to_num:
             value = word_to_num[word]
             if value == 100:
-                current *= value
-            elif value >= 1000:
-                total += current * value
-                current = 0
-            else:
-                current += value
-        else:
-            # Handle compound words like "twenty-one"
-            if '-' in word:
-                parts = word.split('-')
-                for part in parts:
-                    if part in word_to_num:
-                        current += word_to_num[part]
-    
-    return total + current
-
-# German word to number conversion
-def german_to_int(s):
-    word_to_num = {
-        'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
-        'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
-        'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
-        'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
-        'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
-        'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
-        'hundert': 100, 'tausend': 1000
-    }
-    
-    words = s.lower().split()
-    total = 0
-    current = 0
-    
-    for word in words:
-        if word in word_to_num:
-            value = word_to_num[word]
-            if value == 100:
-                current *= value
-            elif value >= 1000:
-                total += current * value
-                current = 0
-            else:
-                current += value
-    
-    return total + current
-
-# Chinese character to number conversion (simplified and traditional)
-def chinese_to_int(s):
-    char_to_num = {
-        '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-        '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
-    }
-    
-    total = 0
-    current = 0
-    prev_value = 0
-    
-    for char in s:
-        if char in char_to_num:
-            value = char_to_num[char]
-            if value >= 10:
                 if current == 0:
                     current = 1
+                current *= value
+            elif value >= 1000:
                 total += current * value
                 current = 0
             else:
-                current = current * 10 + value
-        else:
-            # Skip non-numeric characters
-            continue
+                current += value
     
     return total + current
 
-# Detect language and convert to integer
+# # German word to number conversion (completely rewritten)
+# def german_to_int(s):
+#     word_to_num = {
+#         'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
+#         'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
+#         'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
+#         'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
+#         'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
+#         'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
+#         'hundert': 100, 'tausend': 1000
+#     }
+    
+#     # Handle German compound words like "siebenundachtzig"
+#     s = s.lower().replace('und', ' ').replace('-', ' ')
+#     words = s.split()
+    
+#     total = 0
+#     current = 0
+    
+#     for word in words:
+#         if word in word_to_num:
+#             value = word_to_num[word]
+#             if value == 100:
+#                 if current == 0:
+#                     current = 1
+#                 current *= value
+#             elif value == 1000:
+#                 if current == 0:
+#                     current = 1
+#                 total += current * value
+#                 current = 0
+#             else:
+#                 current += value
+    
+#     return total + current
+
+# # Chinese character to number conversion (completely rewritten)
+# def chinese_to_int(s):
+#     char_to_num = {
+#         '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+#         '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+#         '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
+#     }
+    
+#     # Handle both traditional and simplified
+#     s = s.replace('萬', '万')  # Convert traditional to simplified for processing
+    
+#     total = 0
+#     current = 0
+#     stack = []
+    
+#     for char in s:
+#         if char in char_to_num:
+#             value = char_to_num[char]
+            
+#             if value < 10:  # Digit
+#                 current = current * 10 + value
+#             else:  # Multiplier
+#                 if current == 0:
+#                     current = 1
+#                 current *= value
+                
+#                 # Handle large multipliers (万, 亿)
+#                 if value >= 10000:
+#                     total += current
+#                     current = 0
+#                 else:
+#                     stack.append(current)
+#                     current = 0
+    
+#     # Add remaining values
+#     for val in stack:
+#         total += val
+#     total += current
+    
+#     return total
+
+# Detect language and convert to integer with correct priorities
 def detect_language_and_convert(s):
     # Check if it's a Roman numeral
     if re.match(r'^[IVXLCDM]+$', s.upper()):
@@ -1528,27 +1583,31 @@ def detect_language_and_convert(s):
                    'acht', 'neun', 'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn',
                    'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn', 'zwanzig',
                    'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig',
-                   'neunzig', 'hundert', 'tausend']
+                   'neunzig', 'hundert', 'tausend', 'und']
     
     if any(word in s.lower() for word in german_words):
         return german_to_int(s), 4  # priority 4 for German
     
-    # Check if it's Chinese (traditional or simplified)
+    # Check if it's Chinese
     chinese_chars = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
-                    '百', '千', '万', '億', '亿']
+                    '百', '千', '万', '億', '亿', '萬']
     
     if any(char in s for char in chinese_chars):
-        # Try to distinguish between traditional and simplified
-        if any(char in s for char in ['萬', '億']):  # Traditional Chinese characters
+        # Distinguish between traditional and simplified
+        if any(char in s for char in ['萬', '億']):
             return chinese_to_int(s), 2  # priority 2 for Traditional Chinese
         else:
             return chinese_to_int(s), 3  # priority 3 for Simplified Chinese
     
-    # Default case (shouldn't happen with valid input)
-    return int(s) if s.isdigit() else 0, 5
+    # Default case
+    try:
+        return int(s), 5
+    except:
+        return 0, 5
 
 @main_bp.route('/duolingo-sort', methods=['POST'])
 def duolingo_sort():
+    print(test_parsers())
     try:
         data = request.get_json()
         part = data.get('part', '')
@@ -1584,7 +1643,99 @@ def duolingo_sort():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def german_to_int(s):
+    word_to_num = {
+        'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
+        'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
+        'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
+        'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
+        'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
+        'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
+        'hundert': 100, 'tausend': 1000
+    }
     
+    # Handle German compound words properly
+    s = s.lower().replace('und', ' ').replace('-', ' ')
+    words = s.split()
+    
+    total = 0
+    current = 0
+    
+    for word in words:
+        if word in word_to_num:
+            value = word_to_num[word]
+            
+            # Handle multipliers
+            if value == 100:
+                if current == 0:
+                    current = 1
+                current *= value
+            elif value == 1000:
+                if current == 0:
+                    current = 1
+                total += current * value
+                current = 0
+            else:
+                # For German numbers like "dreihundertelf" (drei + hundert + elf)
+                # We need to add the current value
+                current += value
+    
+    return total + current
+
+def chinese_to_int(s):
+    char_to_num = {
+        '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+        '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
+    }
+    
+    # Handle traditional Chinese characters
+    s = s.replace('萬', '万').replace('億', '亿')
+    
+    total = 0
+    current = 0
+    prev_multiplier = 1
+    
+    for char in s:
+        if char in char_to_num:
+            value = char_to_num[char]
+            
+            if value < 10:  # Digit (0-9)
+                current = value
+            elif value < 10000:  # Multiplier (十, 百, 千)
+                if current == 0:
+                    current = 1
+                total += current * value
+                current = 0
+                prev_multiplier = value
+            else:  # Large multiplier (万, 亿)
+                if current == 0:
+                    current = 1
+                total = (total + current) * value
+                current = 0
+    
+    return total + current
+
+# Test the specific cases
+def test_parsers():
+    test_cases = [
+        "四十五",  # Should be 45
+        "XLIX",    # Should be 49
+        "siebenundachtzig",  # Should be 87
+        "one hundred twenty",  # Should be 120
+        "dreihundertelf",  # Should be 311
+        "one thousand one hundred",  # Should be 1100
+        "MCMXCIX",  # Should be 1999
+        "五萬四千三百二十一",  # Should be 54321
+        "100000"    # Should be 100000
+    ]
+    
+    for case in test_cases:
+        value, priority = detect_language_and_convert(case)
+        print(f"{case} -> {value} (priority {priority})")
+
 #######################################---mages-gambit---#############################################
 def solve_mages_gambit(intel, reserve, fronts, stamina):
     """
@@ -1662,6 +1813,33 @@ def the_mages_gambit():
     return jsonify(results)
 
 #######################################---trading bot---#############################################
+def get_sentiment(title):
+    """
+    Analyze the sentiment of a news title based on keywords.
+    Returns 1 for positive, -1 for negative, 0 for neutral.
+    """
+    positive_keywords = [
+        'buy', 'bull', 'bullish', 'positive', 'adopt', 'reserve', 'approve', 
+        'good', 'great', 'up', 'rise', 'long', 'support', 'trump', 'signs', 
+        'breakthrough', 'rally', 'increase', 'boost', 'win', 'success'
+    ]
+    negative_keywords = [
+        'sell', 'bear', 'bearish', 'negative', 'ban', 'crash', 'bad', 'down', 
+        'fall', 'short', 'resistance', 'sacks', 'drop', 'plummet', 'warning', 
+        'fail', 'loss', 'reject', 'fraud', 'attack'
+    ]
+    
+    title_lower = title.lower()
+    positive_count = sum(1 for word in positive_keywords if word in title_lower)
+    negative_count = sum(1 for word in negative_keywords if word in title_lower)
+    
+    if positive_count > negative_count:
+        return 1
+    elif negative_count > positive_count:
+        return -1
+    else:
+        return 0
+
 @main_bp.route('/trading-bot', methods=['POST'])
 def trading_bot():
     data = request.get_json()
@@ -1672,29 +1850,36 @@ def trading_bot():
     for event in data:
         id = event['id']
         observation_candles = event['observation_candles']
-        if len(observation_candles) < 1:
+        if len(observation_candles) < 2:
+            # Skip events with fewer than 2 observation candles
             continue
+            
         entry_price = observation_candles[0]['close']
-        last_obs_candle = observation_candles[-1]
-        last_obs_price = last_obs_candle['close']
-        pct_change = (last_obs_price - entry_price) / entry_price
-        volume_sum = sum(candle['volume'] for candle in observation_candles)
-        confidence = abs(pct_change) * volume_sum
+        last_obs_price = observation_candles[-1]['close']
+        obs_change = (last_obs_price - entry_price) / entry_price
+        total_volume = sum(candle['volume'] for candle in observation_candles)
+        
+        sentiment = get_sentiment(event['title'])
+        
+        # Calculate agreement between sentiment and observation change
+        if sentiment == 0:
+            agreement = 1.0
+        else:
+            agreement = 1.0 if sentiment * obs_change > 0 else 0.5
+        
+        confidence = abs(obs_change) * total_volume * agreement
+        decision = 'LONG' if obs_change > 0 else 'SHORT'
+        
         events.append({
             'id': id,
-            'pct_change': pct_change,
-            'confidence': confidence
-        })
-
-    events.sort(key=lambda x: x['confidence'], reverse=True)
-    selected_events = events[:50]
-
-    output = []
-    for event in selected_events:
-        decision = 'LONG' if event['pct_change'] > 0 else 'SHORT'
-        output.append({
-            'id': event['id'],
+            'confidence': confidence,
             'decision': decision
         })
-
+    
+    # Sort events by confidence descending and select top 50
+    events.sort(key=lambda x: x['confidence'], reverse=True)
+    selected_events = events[:50]
+    
+    # Prepare output
+    output = [{'id': event['id'], 'decision': event['decision']} for event in selected_events]
     return jsonify(output)
