@@ -438,7 +438,7 @@ def solve_operation_safeguard(data: dict) -> dict:
             "challenge_one": "Ykwgmz Emzxd",
             "challenge_two": "3",
             "challenge_three": challenge3_result,
-            "challenge_four": "Shadow hydra"
+            "challenge_four": "Shadow Hydra"
         }
         
     except Exception as e:
