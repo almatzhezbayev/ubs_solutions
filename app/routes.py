@@ -17,6 +17,7 @@ import networkx as nx
 import random
 from copy import deepcopy
 import json
+from app.grids_2048 import process_2048_move
 
 from app.duolingo import detect_language_and_convert, roman_to_int
 
@@ -1552,276 +1553,31 @@ def trading_bot():
 
 
 #######################################---2048---#############################################
-def process_2048_move(grid, direction):
-    """
-    Process a 2048 move for any grid size
-    """
-    if not grid or not isinstance(grid, list):
-        return grid, None
-    
-    rows = len(grid)
-    cols = len(grid[0]) if rows > 0 else 0
-    
-    next_grid = [[cell for cell in row] for row in grid]
-    moved = False
-    
-    # Process move based on direction and grid size
-    if direction == "LEFT":
-        moved = move_left(next_grid, rows, cols)
-    elif direction == "RIGHT":
-        moved = move_right(next_grid, rows, cols)
-    elif direction == "UP":
-        moved = move_up(next_grid, rows, cols)
-    elif direction == "DOWN":
-        moved = move_down(next_grid, rows, cols)
-    
-    # Only add new tile if grid changed AND there's space
-    if moved and has_empty_cell(next_grid, rows, cols):
-        next_grid = add_random_tile(next_grid, rows, cols)
-    
-    end_game = check_game_status(next_grid, rows, cols)
-    return next_grid, end_game
-
-
-def move_left(grid, rows, cols):
-    """Move and merge tiles to the left for any grid size"""
-    moved = False
-    for i in range(rows):
-        # Remove None values and invalid values (0 or negative)
-        row = [x for x in grid[i] if x is not None and x > 0]
-        new_row = []
-        j = 0
-        
-        while j < len(row):
-            if j + 1 < len(row) and row[j] == row[j + 1]:
-                # Merge tiles
-                merged_value = row[j] * 2
-                new_row.append(merged_value)
-                j += 2
-                moved = True
-            else:
-                new_row.append(row[j])
-                j += 1
-        
-        # Pad with None values
-        new_row.extend([None] * (cols - len(new_row)))
-        
-        # Check if row changed
-        if grid[i] != new_row:
-            moved = True
-            grid[i] = new_row
-    
-    return moved
-
-def move_right(grid, rows, cols):
-    """Move and merge tiles to the right for any grid size"""
-    moved = False
-    for i in range(rows):
-        # Remove None values and invalid values
-        row = [x for x in grid[i] if x is not None and x > 0]
-        new_row = []
-        j = len(row) - 1
-        
-        while j >= 0:
-            if j - 1 >= 0 and row[j] == row[j - 1]:
-                # Merge tiles
-                merged_value = row[j] * 2
-                new_row.insert(0, merged_value)
-                j -= 2
-                moved = True
-            else:
-                new_row.insert(0, row[j])
-                j -= 1
-        
-        # Pad with None values at the beginning
-        new_row = [None] * (cols - len(new_row)) + new_row
-        
-        # Check if row changed
-        if grid[i] != new_row:
-            moved = True
-            grid[i] = new_row
-    
-    return moved
-
-def move_up(grid, rows, cols):
-    """Move and merge tiles upward for any grid size"""
-    moved = False
-    # Create a new grid with the same structure
-    new_grid = [[None] * cols for _ in range(rows)]
-    
-    for j in range(cols):
-        # Get column, filtering out None and invalid values
-        col = [grid[i][j] for i in range(rows) if grid[i][j] is not None and grid[i][j] > 0]
-        new_col = []
-        i = 0
-        
-        while i < len(col):
-            if i + 1 < len(col) and col[i] == col[i + 1]:
-                # Merge tiles
-                merged_value = col[i] * 2
-                new_col.append(merged_value)
-                i += 2
-                moved = True
-            else:
-                new_col.append(col[i])
-                i += 1
-        
-        # Pad with None values
-        new_col.extend([None] * (rows - len(new_col)))
-        
-        # Update column in new grid
-        for idx in range(rows):
-            new_grid[idx][j] = new_col[idx]
-            # Check if value changed
-            if grid[idx][j] != new_col[idx]:
-                moved = True
-    
-    # Update the original grid
-    for i in range(rows):
-        for j in range(cols):
-            grid[i][j] = new_grid[i][j]
-    
-    return moved
-
-def move_down(grid, rows, cols):
-    """Move and merge tiles downward for any grid size"""
-    moved = False
-    # Create a new grid with the same structure
-    new_grid = [[None] * cols for _ in range(rows)]
-    
-    for j in range(cols):
-        # Get column, filtering out None and invalid values
-        col = [grid[i][j] for i in range(rows) if grid[i][j] is not None and grid[i][j] > 0]
-        new_col = []
-        i = len(col) - 1
-        
-        while i >= 0:
-            if i - 1 >= 0 and col[i] == col[i - 1]:
-                # Merge tiles
-                merged_value = col[i] * 2
-                new_col.insert(0, merged_value)
-                i -= 2
-                moved = True
-            else:
-                new_col.insert(0, col[i])
-                i -= 1
-        
-        # Pad with None values at the beginning
-        new_col = [None] * (rows - len(new_col)) + new_col
-        
-        # Update column in new grid
-        for idx in range(rows):
-            new_grid[idx][j] = new_col[idx]
-            # Check if value changed
-            if grid[idx][j] != new_col[idx]:
-                moved = True
-    
-    # Update the original grid
-    for i in range(rows):
-        for j in range(cols):
-            grid[i][j] = new_grid[i][j]
-    
-    return moved
-
-def has_empty_cell(grid, rows, cols):
-    """Check if there's at least one empty cell for any grid size"""
-    for i in range(rows):
-        for j in range(cols):
-            if grid[i][j] is None:
-                return True
-    return False
-
-def add_random_tile(grid, rows, cols):
-    """Add a random tile to empty cell for any grid size"""
-    empty_cells = []
-    for i in range(rows):
-        for j in range(cols):
-            if grid[i][j] is None:
-                empty_cells.append((i, j))
-    
-    if empty_cells:
-        i, j = random.choice(empty_cells)
-        grid[i][j] = 2 if random.random() < 0.9 else 4
-    
-    return grid
-
-def check_game_status(grid, rows, cols):
-    """Check if game is won, lost, or still ongoing for any grid size"""
-    # Check for win (2048 tile)
-    for i in range(rows):
-        for j in range(cols):
-            if grid[i][j] == 2048:
-                return 'win'
-    
-    # Check if there are empty cells
-    if has_empty_cell(grid, rows, cols):
-        return None
-    
-    # Check if any moves are possible (adjacent tiles with same value)
-    for i in range(rows):
-        for j in range(cols):
-            current = grid[i][j]
-            if current is None:
-                continue
-            # Check right neighbor
-            if j < cols - 1 and grid[i][j + 1] == current:
-                return None
-            # Check bottom neighbor
-            if i < rows - 1 and grid[i + 1][j] == current:
-                return None
-    
-    # No moves possible
-    return 'lose'
-
-def sanitize_grid(grid):
-    """Convert any invalid values to None for any grid size"""
-    if not grid or not isinstance(grid, list):
-        return [[]]
-    
-    rows = len(grid)
-    if rows == 0:
-        return [[]]
-    
-    cols = len(grid[0])
-    sanitized = []
-    
-    for i in range(rows):
-        new_row = []
-        for j in range(cols):
-            value = grid[i][j]
-            # Keep only positive numbers and None
-            if value is None or (isinstance(value, (int, float)) and value > 0):
-                new_row.append(value)
-            else:
-                new_row.append(None)
-        sanitized.append(new_row)
-    
-    return sanitized
-
-@main_bp.route('/2048', methods=['POST'])
+@main_bp.route('/2048', methods=['POST', 'OPTIONS'])
 def handle_2048():
     try:
-        # Parse JSON data
+        # Handle CORS preflight
+        if request.method == 'OPTIONS':
+            response = jsonify({"status": "ok"})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.add('Access-Control-Allow-Methods', 'POST')
+            return response
+        
+        # Parse JSON
         try:
             data = json.loads(request.data)
         except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON data"}), 400
+            return jsonify({"error": "Invalid JSON"}), 400
         
         grid = data.get('grid')
-        merge_direction = data.get('mergeDirection')
+        direction = data.get('mergeDirection')
         
-        # Validate input
-        if not grid or not merge_direction:
-            return jsonify({"error": "Missing grid or mergeDirection"}), 400
-        
-        # Sanitize input grid (convert invalid values to None)
-        grid = sanitize_grid(grid)
+        if not grid or not direction:
+            return jsonify({"error": "Missing grid or direction"}), 400
         
         # Process the move
-        next_grid, end_game = process_2048_move(grid, merge_direction)
-        
-        # Sanitize output grid
-        next_grid = sanitize_grid(next_grid)
+        next_grid, end_game = process_2048_move(grid, direction)
         
         response = jsonify({
             "nextGrid": next_grid,
@@ -1832,7 +1588,6 @@ def handle_2048():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 #######################################---The Ink Archive---#############################################
 @main_bp.route('/The-Ink-Archive', methods=['POST'])
