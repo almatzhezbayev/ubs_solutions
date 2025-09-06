@@ -77,57 +77,6 @@ def ticketing_agent():
 
     return jsonify(result)
 
-# @main_bp.route('/blankety', methods=['POST'])
-# def blankety():
-#     data = request.get_json()
-#     series_list = data['series']
-#     result = []
-    
-#     for series in series_list:
-#         n = len(series)
-#         indices = np.arange(n)
-#         # Extract known points
-#         known_indices = []
-#         known_values = []
-#         for i, val in enumerate(series):
-#             if val is not None:
-#                 known_indices.append(i)
-#                 known_values.append(val)
-        
-#         known_indices = np.array(known_indices)
-#         known_values = np.array(known_values)
-        
-#         # If there are no known points, we cannot impute - but should not happen?
-#         if len(known_indices) == 0:
-#             # All null? Then fill with zeros? But should not happen.
-#             imputed_series = [0.0] * n
-#         elif len(known_indices) == 1:
-#             # Only one point, fill constant
-#             imputed_series = [known_values[0]] * n
-#         else:
-#             # Check if we have enough points for cubic spline
-#             if len(known_indices) < 4:
-#                 # Use linear interpolation
-#                 # Create a linear spline with s=0?
-#                 spline = UnivariateSpline(known_indices, known_values, k=1, s=0)
-#             else:
-#                 # Use cubic spline with smoothing
-#                 # Choose s: let's use 0.5 * number of points
-#                 s_val = 0.5 * len(known_indices)
-#                 spline = UnivariateSpline(known_indices, known_values, k=3, s=s_val)
-#             # Predict all indices
-#             predicted = spline(indices)
-#             # Create the completed series
-#             imputed_series = []
-#             for i, val in enumerate(series):
-#                 if val is None:
-#                     imputed_series.append(float(predicted[i]))
-#                 else:
-#                     imputed_series.append(val)
-#         result.append(imputed_series)
-    
-#     return jsonify({'answer': result})
-
 def simple_impute(series):
     """Simple but robust imputation using pandas interpolation"""
     # Convert to pandas Series
@@ -179,7 +128,7 @@ def solve_subway_scheduling(edges, tasks, s0):
         return 0, 0, []
     
     # Build adjacency list for the graph
-    stations = set()
+    stations = set([s0])
     for s1, s2, c in edges:
         stations.add(s1)
         stations.add(s2)
@@ -187,7 +136,6 @@ def solve_subway_scheduling(edges, tasks, s0):
     for task in tasks:
         stations.add(task[2])  # Add task stations
     
-    stations.add(s0)  # Add starting station
     station_list = sorted(list(stations))
     station_to_idx = {station: i for i, station in enumerate(station_list)}
     n_stations = len(station_list)
@@ -199,59 +147,86 @@ def solve_subway_scheduling(edges, tasks, s0):
         graph[idx1].append((idx2, c))
         graph[idx2].append((idx1, c))
     
-    # Precompute shortest distances from all stations
-    all_distances = {}
-    for station in station_list:
-        idx = station_to_idx[station]
-        all_distances[idx] = dijkstra(graph, idx, n_stations)
+    # Only compute distances from task stations and starting station
+    distance_cache = {}
     
-    # Sort tasks by end time, keeping track of original indices
+    def get_distance(from_station, to_station):
+        key = (from_station, to_station)
+        if key not in distance_cache:
+            from_idx = station_to_idx[from_station]
+            distances = dijkstra(graph, from_idx, n_stations)
+            to_idx = station_to_idx[to_station]
+            distance_cache[key] = distances[to_idx]
+        return distance_cache[key]
+    
+    # Sort tasks by end time
     indexed_tasks = [(tasks[i][0], tasks[i][1], tasks[i][2], tasks[i][3], i) 
                      for i in range(len(tasks))]
     indexed_tasks.sort(key=lambda x: x[1])
     
     n = len(indexed_tasks)
     
-    # dp[i] = (max_reward, min_fee, last_station, prev_task_index)
-    dp = [(0, 0, s0, -1) for _ in range(n)]
+    # dp[i] = (max_reward, min_fee, prev_task_index)
+    dp = [None] * n
     
     for i in range(n):
         start_time, end_time, station, reward, orig_idx = indexed_tasks[i]
         
         # Option 1: Take this task as the first task (from starting station)
-        transport_cost = all_distances[station_to_idx[s0]][station_to_idx[station]]
+        transport_cost = get_distance(s0, station)
         if transport_cost != float('inf'):
-            dp[i] = (reward, transport_cost, station, -1)
+            dp[i] = (reward, transport_cost, -1)
         
         # Option 2: Take this task after some previous compatible task
-        for j in range(i):
-            prev_start, prev_end, prev_station, prev_reward, prev_orig_idx = indexed_tasks[j]
-            
-            # Check if tasks are compatible (previous task ends before current starts)
-            if prev_end <= start_time:
-                prev_total_reward, prev_total_fee, _, _ = dp[j]
-                transport_cost = all_distances[station_to_idx[prev_station]][station_to_idx[station]]
+        # Use binary search to find the latest compatible task
+        left, right = 0, i - 1
+        latest_compatible = -1
+        
+        while left <= right:
+            mid = (left + right) // 2
+            if indexed_tasks[mid][1] <= start_time:  # prev_end <= start_time
+                latest_compatible = mid
+                left = mid + 1
+            else:
+                right = mid - 1
+        
+        # Check all compatible tasks starting from the latest one
+        for j in range(latest_compatible, -1, -1):
+            if dp[j] is None:
+                continue
                 
-                if transport_cost != float('inf'):
-                    new_reward = prev_total_reward + reward
-                    new_fee = prev_total_fee + transport_cost
-                    
-                    # Check if this is better than current best for task i
-                    curr_reward, curr_fee, _, _ = dp[i]
-                    if (new_reward > curr_reward or 
-                        (new_reward == curr_reward and new_fee < curr_fee)):
-                        dp[i] = (new_reward, new_fee, station, j)
+            prev_start, prev_end, prev_station, prev_reward, prev_orig_idx = indexed_tasks[j]
+            prev_total_reward, prev_total_fee, _ = dp[j]
+            
+            # Early termination: if current best is already better, no need to check earlier tasks
+            if dp[i] is not None and prev_total_reward + reward < dp[i][0]:
+                break
+                
+            transport_cost = get_distance(prev_station, station)
+            
+            if transport_cost != float('inf'):
+                new_reward = prev_total_reward + reward
+                new_fee = prev_total_fee + transport_cost
+                
+                # Check if this is better than current best for task i
+                if (dp[i] is None or new_reward > dp[i][0] or 
+                    (new_reward == dp[i][0] and new_fee < dp[i][1])):
+                    dp[i] = (new_reward, new_fee, j)
     
     # Find the task with maximum reward (and minimum fee if tied)
-    # Include return cost to starting station
     max_reward = 0
     min_fee = float('inf')
     best_task = -1
     
     for i in range(n):
-        reward, fee, last_station, _ = dp[i]
+        if dp[i] is None:
+            continue
+            
+        reward, fee, _ = dp[i]
+        last_station = indexed_tasks[i][2]
+        
         # Add return cost to starting station
-        return_cost = all_distances[station_to_idx[last_station]][station_to_idx[s0]]
+        return_cost = get_distance(last_station, s0)
         total_fee = fee + return_cost
         
         if (reward > max_reward or 
@@ -265,7 +240,9 @@ def solve_subway_scheduling(edges, tasks, s0):
     current = best_task
     
     while current != -1:
-        _, _, _, prev_task = dp[current]
+        if dp[current] is None:
+            break
+        _, _, prev_task = dp[current]
         selected_tasks.append(indexed_tasks[current][4])  # original index
         current = prev_task
     
@@ -280,6 +257,7 @@ def princess_diaries():
     tasks_data = data['tasks']
     subway_data = data['subway']
     starting_station = data['starting_station']
+
     tasks = []
     task_names = []
     for task in tasks_data:
@@ -310,8 +288,6 @@ def princess_diaries():
     }
     
     return jsonify(response)
-
-
 
 @main_bp.route('/trading-formula', methods=['POST'])
 def trading_formula():
@@ -407,3 +383,4 @@ def safe_eval(expression):
             return eval(safe_expression)
         except:
             raise ValueError(f"Could not evaluate expression: {expression}")
+        
