@@ -548,7 +548,7 @@ def investigate():
     """
     try:
         data = request.get_json()
-        
+        print("INVESTIGATE data:", data)
         # Handle the input format: it's an array of networks
         if isinstance(data, list):
             networks = data
@@ -1357,7 +1357,7 @@ def min_boats_needed(intervals):
     
     return max_boats
 
-@main_bp.route('/sailing-club/submission', methods=['POST'])
+@main_bp.route('/sailing-club', methods=['POST'])
 def sailing_club_submission():
     """
     Solve the sailing club booking problem.
@@ -1660,3 +1660,41 @@ def the_mages_gambit():
         })
     
     return jsonify(results)
+
+#######################################---trading bot---#############################################
+@main_bp.route('/trading-bot', methods=['POST'])
+def trading_bot():
+    data = request.get_json()
+    if not data or not isinstance(data, list):
+        return jsonify({"error": "Invalid input"}), 400
+
+    events = []
+    for event in data:
+        id = event['id']
+        observation_candles = event['observation_candles']
+        if len(observation_candles) < 1:
+            continue
+        entry_price = observation_candles[0]['close']
+        last_obs_candle = observation_candles[-1]
+        last_obs_price = last_obs_candle['close']
+        pct_change = (last_obs_price - entry_price) / entry_price
+        volume_sum = sum(candle['volume'] for candle in observation_candles)
+        confidence = abs(pct_change) * volume_sum
+        events.append({
+            'id': id,
+            'pct_change': pct_change,
+            'confidence': confidence
+        })
+
+    events.sort(key=lambda x: x['confidence'], reverse=True)
+    selected_events = events[:50]
+
+    output = []
+    for event in selected_events:
+        decision = 'LONG' if event['pct_change'] > 0 else 'SHORT'
+        output.append({
+            'id': event['id'],
+            'decision': decision
+        })
+
+    return jsonify(output)
