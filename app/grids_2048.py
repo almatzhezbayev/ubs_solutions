@@ -28,7 +28,10 @@ def process_2048_move(grid, direction):
     if moved and has_empty_cell(next_grid, rows, cols):
         next_grid = add_random_tile(next_grid, rows, cols)
     
-    end_game = check_game_status_advanced(next_grid, rows, cols)
+    if not moved:
+        end_game = 'lose'
+    else:
+        end_game = check_game_status_advanced(next_grid, rows, cols)
     return next_grid, end_game
 
 def convert_value(value):
