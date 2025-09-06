@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from datetime import datetime
+import math
 
 main_bp = Blueprint('main', __name__)
 
@@ -12,34 +13,49 @@ def home():
         'timestamp': datetime.now().isoformat()
     })
 
-# Example API route
-@main_bp.route('/api/users', methods=['GET'])
-def get_users():
-    users = [
-        {'id': 1, 'name': 'John Doe', 'email': 'john@example.com'},
-        {'id': 2, 'name': 'Jane Smith', 'email': 'jane@example.com'}
-    ]
-    return jsonify(users)
+def compute_distance(loc1, loc2):
+    x1, y1 = loc1
+    x2, y2 = loc2
+    return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
-# Route with parameter
-@main_bp.route('/api/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    user = {'id': user_id, 'name': 'Example User', 'email': f'user{user_id}@example.com'}
-    return jsonify(user)
+from flask import Flask, request, jsonify
+import math
 
-# POST route example
-@main_bp.route('/api/users', methods=['POST'])
-def create_user():
+app = Flask(__name__)
+
+def compute_distance(loc1, loc2):
+    x1, y1 = loc1
+    x2, y2 = loc2
+    return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
+
+@main_bp.route('/ticketing-agent', methods=['POST'])
+def ticketing_agent():
     data = request.get_json()
-    
-    if not data or 'name' not in data or 'email' not in data:
-        return jsonify({'error': 'Name and email are required'}), 400
-    
-    # Simulate creating a user
-    new_user = {
-        'id': 3,  # In real app, this would come from database
-        'name': data['name'],
-        'email': data['email']
-    }
-    
-    return jsonify(new_user), 201
+    customers = data['customers']
+    concerts = data['concerts']
+    priority = data['priority']
+
+    result = {}
+    for customer in customers:
+        best_concert = None
+        best_score = -1
+        for concert in concerts:
+            score = 0
+            # VIP factor
+            if customer['vip_status']:
+                score += 100
+            # Credit card factor
+            cc = customer['credit_card']
+            if cc in priority and priority[cc] == concert['name']:
+                score += 50
+            # Latency factor
+            dist = compute_distance(customer['location'], concert['booking_center_location'])
+            latency_pts = max(0, 30 - int(dist))
+            score += latency_pts
+
+            if score > best_score:
+                best_score = score
+                best_concert = concert['name']
+        result[customer['name']] = best_concert
+
+    return jsonify(result)
