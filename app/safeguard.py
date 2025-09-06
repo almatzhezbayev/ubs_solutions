@@ -100,15 +100,79 @@ def inverse_double_consonants(x: str) -> str:
         i += 1
     return ''.join(result)
 
+def parse_nested_transformations(transformation_str: str) -> List[str]:
+    """Parse nested transformation functions into a list of function names"""
+    # Handle nested functions like "encode_mirror_alphabet(double_consonants(x))"
+    # We need to parse from inside out
+    
+    # Remove spaces and normalize
+    clean_str = transformation_str.strip()
+    
+    # If it's just a simple function call, return it
+    if clean_str.count('(') == 1 and clean_str.endswith('(x)'):
+        return [clean_str.replace('(x)', '')]
+    
+    # For nested calls, we need to parse from innermost to outermost
+    functions = []
+    current = clean_str
+    
+    # Keep extracting the innermost function until we're done
+    while '(' in current and current != 'x':
+        # Find the innermost function call (one that contains only 'x' or another variable)
+        # Work backwards from the innermost parentheses
+        
+        # Find all function calls
+        import re
+        
+        # Pattern to match function_name(content)
+        pattern = r'(\w+)\([^()]*\)'
+        matches = list(re.finditer(pattern, current))
+        
+        if not matches:
+            break
+            
+        # Find the innermost match (the one with the simplest content)
+        innermost_match = None
+        for match in matches:
+            content = current[match.start():match.end()]
+            # Check if this contains only x or simple content
+            inner_content = content[content.find('(')+1:content.rfind(')')]
+            if inner_content.strip() in ['x', ''] or not re.search(r'\w+\(', inner_content):
+                innermost_match = match
+                break
+        
+        if not innermost_match:
+            # If we can't find a simple innermost function, just take the first one
+            innermost_match = matches[0]
+        
+        # Extract the function name
+        func_name = innermost_match.group(1)
+        functions.append(func_name)
+        
+        # Replace this function call with 'x' for the next iteration
+        before = current[:innermost_match.start()]
+        after = current[innermost_match.end():]
+        current = before + 'x' + after
+        
+        # If we've reduced it to just 'x', we're done
+        if current.strip() == 'x':
+            break
+    
+    return functions
+
 def reverse_transformations(transformed_word: str, transformations: List[str]) -> str:
-    """Apply transformations in reverse order"""
+    """Apply transformations in reverse order, handling nested functions"""
     current_word = transformed_word
     
-    # Apply transformations in reverse order
-    for transform_func in reversed(transformations):
-        # Extract function name from the transformation string
-        func_name = transform_func.replace('(x)', '').strip()
-        
+    # Process each transformation string
+    all_functions = []
+    for transform_str in transformations:
+        # Parse nested functions from this transformation
+        nested_funcs = parse_nested_transformations(transform_str)
+        all_functions.extend(nested_funcs)
+    
+    # Apply all functions in reverse order
+    for func_name in reversed(all_functions):
         if func_name == 'mirror_words':
             current_word = inverse_mirror_words(current_word)
         elif func_name == 'encode_mirror_alphabet':
