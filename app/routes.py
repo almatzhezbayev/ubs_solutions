@@ -822,58 +822,17 @@ def operation_safeguard():
     """
     POST endpoint for Operation Safeguard challenge
     """
+    from app.safeguard import solve_operation_safeguard
+    
     try:
         data = request.get_json()
-        
-        # Challenge 1: Reverse transformations
-        transformations_str = data['challenge_one']['transformations']
-        transformed_word = data['challenge_one']['transformed_encrypted_word']
-        
-        # Parse transformations list
-        transformations = re.findall(r'(\w+)\(x\)', transformations_str)
-        transformations.reverse()  # Apply in reverse order
-        
-        # Apply inverse transformations
-        current_word = transformed_word
-        for transform in transformations:
-            if transform == 'mirror_words':
-                current_word = inverse_mirror_words(current_word)
-            elif transform == 'encode_mirror_alphabet':
-                current_word = inverse_encode_mirror_alphabet(current_word)
-            elif transform == 'toggle_case':
-                current_word = inverse_toggle_case(current_word)
-            elif transform == 'swap_pairs':
-                current_word = inverse_swap_pairs(current_word)
-            elif transform == 'encode_index_parity':
-                current_word = inverse_encode_index_parity(current_word)
-            elif transform == 'double_consonants':
-                current_word = inverse_double_consonants(current_word)
-        
-        challenge1_result = current_word
-        
-        # Challenge 2: Coordinate pattern analysis
-        coordinates = data['challenge_two']
-        challenge2_result = analyze_coordinates(coordinates)
-        
-        # Challenge 3: Log decryption
-        log_entry = data['challenge_three']
-        challenge3_result = parse_and_decrypt_log(log_entry)
-        
-        # Challenge 4: Final decryption
-        challenge4_result = decrypt_final_message(
-            challenge1_result, challenge2_result, challenge3_result
-        )
-        
-        response = {
-            "challenge_one": challenge1_result,
-            "challenge_two": challenge2_result,
-            "challenge_three": challenge3_result,
-            "challenge_four": challenge4_result
-        }
-        
-        return jsonify(response)
+        logging.info(f"Received data for operation safeguard: {data}")
+        result = solve_operation_safeguard(data)
+        logging.info(f"Operation safeguard result: {result}")
+        return jsonify(result)
         
     except Exception as e:
+        logging.error(f"Error occurred in operation safeguard: {e}")
         return jsonify({"error": str(e)}), 400
 
 #######################################---MST IMAGE---#############################################
