@@ -16,6 +16,7 @@ import cv2
 import io
 import networkx as nx
 from app.grids_2048 import process_2048_move
+from app.mouse import process_micromouse_request
 import json
 
 # Configure logging
@@ -2236,4 +2237,25 @@ def fog_of_wall():
         
     except Exception as e:
         logging.error(f"Error in fog-of-wall endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+#####################################---MICRO-MOUSE---###############################################
+@main_bp.route('/micro-mouse', methods=['POST'])
+def micromouse():
+    """
+    POST endpoint for micro-mouse maze navigation
+    Handles mouse movement instructions based on sensor data and game state
+    """
+    try:
+        data = request.json
+        logging.info(f"Micro-mouse request received: {data}")
+        
+        # Process the micromouse request using the imported function
+        response_data = process_micromouse_request(data)
+        
+        logging.info(f"Micro-mouse response: {response_data}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logging.error(f"Error in micro-mouse endpoint: {str(e)}")
         return jsonify({"error": str(e)}), 500
