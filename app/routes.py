@@ -1993,7 +1993,18 @@ def find_maximum_positive_cycle(graph, n, goods):
             break
     
     if best_cycle:
-        return [goods[node] for node in best_cycle]
+        # Normalize the cycle to start with the lexicographically smallest good name
+        cycle_goods = [goods[node] for node in best_cycle[:-1]]  # Remove duplicate end node
+        min_idx = 0
+        min_good = cycle_goods[0]
+        for i, good in enumerate(cycle_goods):
+            if good < min_good:
+                min_good = good
+                min_idx = i
+        
+        # Rotate the cycle to start with the lexicographically smallest good
+        normalized_cycle = cycle_goods[min_idx:] + cycle_goods[:min_idx] + [cycle_goods[min_idx]]
+        return normalized_cycle
     
     return None
 
@@ -2015,7 +2026,18 @@ def find_maximum_cycle(graph, n, goods):
                 best_cycle = cycle
     
     if best_cycle:
-        return [goods[node] for node in best_cycle]
+        # Normalize the cycle to start with the lexicographically smallest good name
+        cycle_goods = [goods[node] for node in best_cycle[:-1]]  # Remove duplicate end node
+        min_idx = 0
+        min_good = cycle_goods[0]
+        for i, good in enumerate(cycle_goods):
+            if good < min_good:
+                min_good = good
+                min_idx = i
+        
+        # Rotate the cycle to start with the lexicographically smallest good
+        normalized_cycle = cycle_goods[min_idx:] + cycle_goods[:min_idx] + [cycle_goods[min_idx]]
+        return normalized_cycle
     
     return None
 
