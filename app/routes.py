@@ -2219,6 +2219,7 @@ def handle_2048():
         # Parse JSON
         try:
             data = json.loads(request.data)
+            print("2048 data:", data)
         except json.JSONDecodeError:
             return jsonify({"error": "Invalid JSON"}), 400
         
