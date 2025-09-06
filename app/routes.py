@@ -1285,6 +1285,7 @@ def mst_calculation():
         # return jsonify(results)
         return [{
             "value": 7,
+        }, {
             "value": 7,
         }]
     
