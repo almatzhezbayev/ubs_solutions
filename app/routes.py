@@ -1273,7 +1273,7 @@ def mst_calculation():
         data = request.get_json()
         if not data or not isinstance(data, list):
             return jsonify({'error': 'Invalid input format'}), 400
-        
+        print("data:", data)
         results = []
         
         for i, test_case in enumerate(data):
@@ -1313,3 +1313,85 @@ def mst_calculation():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    
+def merge_intervals(intervals):
+    """
+    Merge overlapping intervals and return sorted result.
+    """
+    if not intervals:
+        return []
+    
+    # Sort intervals by start time
+    intervals.sort(key=lambda x: x[0])
+    
+    merged = []
+    for start, end in intervals:
+        # If merged is empty or current interval doesn't overlap with the last one
+        if not merged or merged[-1][1] < start:
+            merged.append([start, end])
+        else:
+            # Overlapping intervals, merge them
+            merged[-1][1] = max(merged[-1][1], end)
+    
+    return merged
+
+def min_boats_needed(intervals):
+    """
+    Find minimum number of boats needed using sweep line algorithm.
+    """
+    if not intervals:
+        return 0
+    
+    # Create events: +1 for start, -1 for end
+    events = []
+    for start, end in intervals:
+        events.append((start, 1))    # booking starts
+        events.append((end, -1))     # booking ends
+    
+    # Sort events by time, with end events before start events at same time
+    events.sort(key=lambda x: (x[0], x[1]))
+    
+    current_boats = 0
+    max_boats = 0
+    
+    for time, delta in events:
+        current_boats += delta
+        max_boats = max(max_boats, current_boats)
+    
+    return max_boats
+
+@main_bp.route('/sailing-club/submission', methods=['POST'])
+def sailing_club_submission():
+    """
+    Solve the sailing club booking problem.
+    Part 1: Merge overlapping booking intervals
+    Part 2: Find minimum number of boats needed
+    """
+    data = request.get_json()
+    test_cases = data.get('testCases', [])
+    
+    solutions = []
+    
+    for test_case in test_cases:
+        test_id = test_case['id']
+        bookings = test_case['input']
+        print(test_case)
+        
+        # Part 1: Merge overlapping intervals
+        sorted_merged_slots = merge_intervals(bookings)
+        
+        # Part 2: Find minimum boats needed
+        min_boats = min_boats_needed(bookings)
+        
+        solution = {
+            "id": test_id,
+            "sortedMergedSlots": sorted_merged_slots,
+            "minBoatsNeeded": min_boats
+        }
+        print(solution)
+
+        solutions.append(solution)
+    
+    return jsonify({
+        "solutions": solutions
+    })
