@@ -23,15 +23,15 @@ def trivia():
     GET endpoint that returns answers to the multiple choice trivia questions
     """
     answers = [
-        1,  # 1. "Trivia!": How many challenges are there this year, which title ends with an exclamation mark? -> 4
-        1,  # 2. "Ticketing Agent": What type of tickets is the ticketing agent handling? -> Museum
-        2,  # 3. "Blankety Blanks": How many lists and elements per list are included? -> 100 lists x 1000 elements
-        2,  # 4. "Princess Diaries": What's Princess Mia's cat name? -> Fat Louie
-        4,  # 5. "MST Calculation": What is the average number of nodes? -> 10
-        4,  # 6. "Universal Bureau of Surveillance": Which singer did not have a James Bond theme? -> Amy Winehouse
-        3,  # 7. "Operation Safeguard": What is the smallest font size? -> 2px
-        4,  # 8. "Capture The Flag": Which of these are anagrams? -> graft cute leapt
-        2   # 9. "Filler 1": Where has UBS Global Coding Challenge been held? -> Australia, Hong Kong, Japan, Singapore
+        1,  
+        1,  
+        2,  
+        2,  
+        3,  
+        1,  
+        3,  
+        5,  
+        4   
     ]
     
     return jsonify({
