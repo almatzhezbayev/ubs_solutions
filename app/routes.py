@@ -1842,6 +1842,7 @@ def handle_2048():
     try:
         # Get JSON data from request
         data = request.get_json()
+        print(f"Received data: {data}")  # Add this for debugging
         if not data:
             return jsonify({"error": "No JSON data received"}), 400
         
@@ -1852,8 +1853,12 @@ def handle_2048():
         if not grid or not merge_direction:
             return jsonify({"error": "Missing grid or mergeDirection"}), 400
         
+        print(f"Processing grid: {grid}, direction: {merge_direction}")  # Add this
+        
         # Process the move and generate next grid
         next_grid, end_game = process_2048_move(grid, merge_direction)
+        
+        print(f"Returning next_grid: {next_grid}, end_game: {end_game}")  # Add this
         
         # Return the response expected by the front-end
         return jsonify({
@@ -1862,4 +1867,7 @@ def handle_2048():
         })
         
     except Exception as e:
+        print(f"Error in handle_2048: {str(e)}")  # Add detailed error logging
+        import traceback
+        traceback.print_exc()  # This will print the full traceback
         return jsonify({"error": str(e)}), 500
