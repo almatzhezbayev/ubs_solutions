@@ -1462,6 +1462,7 @@ def duolingo_sort():
         elif part == 'TWO':
             # Part 2: Multiple languages
             converted = []
+            print("duolingo part 2----", unsorted_list)
             for item in unsorted_list:
                 value, priority = detect_language_and_convert(item)
                 converted.append((value, priority, item))
