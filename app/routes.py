@@ -494,113 +494,97 @@ def chase_the_flag_main():
     return jsonify(flags)
 
 #######################################---investigate---#############################################
-class UnionFind:
-    def __init__(self):
-        self.parent = {}
-        self.rank = {}
-    
-    def find(self, x):
-        if x not in self.parent:
-            self.parent[x] = x
-            self.rank[x] = 0
-            return x
-        if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])
-        return self.parent[x]
-    
-    def union(self, x, y):
-        px, py = self.find(x), self.find(y)
-        if px == py:
-            return False  # Already connected, this edge creates a cycle
-        if self.rank[px] < self.rank[py]:
-            px, py = py, px
-        self.parent[py] = px
-        if self.rank[px] == self.rank[py]:
-            self.rank[px] += 1
-        return True
-
-def find_cycle_edges(network):
+def find_cycle_in_network(edges):
     """
-    Fast cycle detection using Union-Find.
-    Since there's exactly one cycle, we build MST and find the extra edge,
-    then reconstruct the cycle efficiently.
+    Find the unique cycle in a graph that has exactly one cycle.
+    Uses DFS to detect the cycle and returns all edges in the cycle.
     """
-    if not network:
-        return []
-    
-    # Use Union-Find to detect the cycle-forming edge
-    uf = UnionFind()
-    tree_edges = []
-    cycle_edge = None
-    
-    for connection in network:
-        spy1, spy2 = connection['spy1'], connection['spy2']
-        if not uf.union(spy1, spy2):
-            # This edge creates the cycle
-            cycle_edge = connection
-        else:
-            tree_edges.append(connection)
-    
-    if not cycle_edge:
-        return []  # No cycle found
-    
-    # Now we need to find the path between the two nodes of the cycle edge
-    # using only tree edges, then add the cycle edge to complete the cycle
-    
-    # Build adjacency list from tree edges only
+    # Build adjacency list
     graph = defaultdict(list)
-    for edge in tree_edges:
-        spy1, spy2 = edge['spy1'], edge['spy2']
-        graph[spy1].append((spy2, edge))
-        graph[spy2].append((spy1, edge))
+    edge_set = set()
     
-    # Find path between cycle edge endpoints using BFS
-    start, end = cycle_edge['spy1'], cycle_edge['spy2']
-    queue = [(start, [])]
-    visited = {start}
-    path_edges = []
+    for edge in edges:
+        spy1, spy2 = edge["spy1"], edge["spy2"]
+        graph[spy1].append(spy2)
+        graph[spy2].append(spy1)
+        # Store edges in a consistent format (smaller node first)
+        edge_tuple = tuple(sorted([spy1, spy2]))
+        edge_set.add(edge_tuple)
     
-    while queue:
-        node, path = queue.pop(0)
-        if node == end:
-            path_edges = path
-            break
+    # DFS to find cycle
+    visited = set()
+    parent = {}
+    cycle_edges = []
+    
+    def dfs(node, par):
+        visited.add(node)
+        parent[node] = par
         
-        for neighbor, edge in graph[node]:
-            if neighbor not in visited:
-                visited.add(neighbor)
-                queue.append((neighbor, path + [edge]))
+        for neighbor in graph[node]:
+            if neighbor == par:  # Skip the edge we came from
+                continue
+                
+            if neighbor in visited:
+                # Found back edge - this creates the cycle
+                # Trace back from current node to neighbor to find cycle
+                cycle_nodes = []
+                current = node
+                while current != neighbor:
+                    cycle_nodes.append(current)
+                    current = parent[current]
+                cycle_nodes.append(neighbor)
+                
+                # Convert nodes to edges
+                for i in range(len(cycle_nodes)):
+                    node1 = cycle_nodes[i]
+                    node2 = cycle_nodes[(i + 1) % len(cycle_nodes)]
+                    edge_tuple = tuple(sorted([node1, node2]))
+                    if edge_tuple in edge_set:
+                        cycle_edges.append({
+                            "spy1": edge_tuple[0],
+                            "spy2": edge_tuple[1]
+                        })
+                
+                return True
+            else:
+                if dfs(neighbor, node):
+                    return True
+        
+        return False
     
-    # The cycle consists of the path edges + the cycle edge
-    cycle_edges = path_edges + [cycle_edge]
+    # Start DFS from any node
+    if graph:
+        start_node = next(iter(graph.keys()))
+        dfs(start_node, None)
+    
     return cycle_edges
 
 @main_bp.route('/investigate', methods=['POST'])
 def investigate():
     """
-    POST endpoint to find all extra channels (edges that are part of the single cycle)
-    in spy networks to remove cycles.
+    Detect cycles in spy networks. Each network has exactly one cycle.
+    Returns all edges that form the cycle in each network.
     """
     data = request.get_json()
-    networks = data['networks']
+    networks = data.get('networks', [])
     
     result_networks = []
     
     for network_data in networks:
         network_id = network_data['networkId']
-        network = network_data['network']
+        edges = network_data['network']
         
-        extra_channels = find_cycle_edges(network)
+        # Find the cycle in this network
+        cycle_edges = find_cycle_in_network(edges)
         
         result_networks.append({
             "networkId": network_id,
-            "extraChannels": extra_channels
+            "extraChannels": cycle_edges
         })
     
     return jsonify({
         "networks": result_networks
     })
-
 #######################################---SAFEGUARD---#############################################
 def mirror_words(x: str) -> str:
     """Reverse each word in the sentence"""
