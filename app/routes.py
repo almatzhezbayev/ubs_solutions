@@ -2210,3 +2210,30 @@ def handle_2048():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+#####################################---FOG OF WALL---###############################################
+@main_bp.route('/fog-of-wall', methods=['POST'])
+def fog_of_wall():
+    """
+    POST endpoint for the Fog of Wall challenge.
+    Manages multiple crows exploring a fog-covered maze to discover walls.
+    """
+    try:
+        # Parse JSON data
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Import and use the fog solver
+        from app.fog import solve_fog_of_wall
+        
+        # Process the request
+        response_data = solve_fog_of_wall(data)
+        
+        logging.info(f"Fog of Wall response: {response_data}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logging.error(f"Error in fog-of-wall endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
