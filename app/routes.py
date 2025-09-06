@@ -1,6 +1,7 @@
 import binascii
 from collections import defaultdict
 import heapq
+import logging
 from typing import List
 from flask import Blueprint, jsonify, request
 from datetime import datetime
@@ -14,9 +15,18 @@ from PIL import Image
 import cv2
 import io
 import networkx as nx
-
 from app.grids_2048 import process_2048_move
 import json
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
+)
 
 main_bp = Blueprint('main', __name__)
 
