@@ -1398,56 +1398,10 @@ def sailing_club_submission():
             solutions.append(solution)
         
         return jsonify({"solutions": solutions})
-    
     except Exception as e:
-        # Log the error for debugging
-        print(f"Error in sailing_club_submission: {str(e)}")
-        return jsonify({"error": "Internal server error"}), 500
+        print('here')
+        return jsonify({"error here": str(e)}), 404
     
-#######################################---DUOLINGO---#############################################
-@main_bp.route('/duolingo-sort', methods=['POST'])
-def duolingo_sort():
-    try:
-        data = request.get_json()
-        part = data.get('part', '')
-        challenge = data.get('challenge', 0)
-        unsorted_list = data.get('challengeInput', {}).get('unsortedList', [])
-        
-        if part == 'ONE':
-            # Part 1: Only Roman and Arabic numerals - return numeric values as strings
-            converted = []
-            for item in unsorted_list:
-                if re.match(r'^[IVXLCDM]+$', item.upper()):
-                    numeric_value = roman_to_int(item.upper())
-                    converted.append((numeric_value, str(numeric_value)))
-                else:
-                    numeric_value = int(item)
-                    converted.append((numeric_value, str(numeric_value)))
-            
-            converted.sort(key=lambda x: x[0])
-            sorted_list = [value_str for _, value_str in converted]
-            
-        elif part == 'TWO':
-            # Part 2: Multiple languages
-            converted = []
-            print("duolingo part 2----", unsorted_list)
-            for item in unsorted_list:
-                value, priority = detect_language_and_convert(item)
-                converted.append((value, priority, item))
-            
-            # Sort by value first, then by language priority
-            converted.sort(key=lambda x: (x[0], x[1]))
-            sorted_list = [x[2] for x in converted]
-            
-        else:
-            return jsonify({'error': 'Invalid part specified'}), 400
-        
-        return jsonify({
-            'sortedList': sorted_list
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 #######################################---mages-gambit---#############################################
 def solve_mages_gambit(intel, reserve, fronts, stamina):
     """
