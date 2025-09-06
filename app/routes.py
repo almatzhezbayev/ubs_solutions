@@ -18,14 +18,14 @@ def home():
         'status': 'success',
         'timestamp': datetime.now().isoformat()
     })
-
+#####################################---TRIVIA---###############################################
 @main_bp.route('/trivia', methods=['GET'])
 def trivia():
     """
     GET endpoint that returns answers to the multiple choice trivia questions
     """
     answers = [
-        1,  
+        2,  
         1,  
         2,  
         2,  
@@ -40,6 +40,7 @@ def trivia():
         "answers": answers
     })
 
+#########################################---TICKETING---###########################################
 def compute_distance(loc1, loc2):
     x1, y1 = loc1
     x2, y2 = loc2
@@ -77,6 +78,7 @@ def ticketing_agent():
 
     return jsonify(result)
 
+#######################################---BLANKETY---#############################################
 def simple_impute(series):
     """Simple but robust imputation using pandas interpolation"""
     # Convert to pandas Series
@@ -105,7 +107,7 @@ def blankety():
     
     return jsonify({'answer': result})
 
-
+#########################################---PRINCESS---###########################################
 def dijkstra(graph, start, n_stations):
     dist = [float('inf')] * n_stations
     dist[start] = 0
@@ -289,6 +291,174 @@ def princess_diaries():
     
     return jsonify(response)
 
+#######################################---TRADING---#############################################
+def preprocess_latex(latex_formula):
+    """Convert LaTeX formula to Python-compatible expression"""
+    expression = latex_formula.strip()
+    
+    # Remove $$ wrappers if present
+    if expression.startswith('$$') and expression.endswith('$$'):
+        expression = expression[2:-2].strip()
+    
+    # Remove assignment part if present (e.g., "Fee = ")
+    if '=' in expression:
+        parts = expression.split('=', 1)
+        if len(parts) > 1:
+            expression = parts[1].strip()
+    
+    # Step 1: Handle summations first (most complex)
+    expression = handle_summations(expression)
+    
+    # Step 2: Replace other LaTeX commands
+    expression = re.sub(r'\\text{([^}]*)}', r'\1', expression)
+    expression = re.sub(r'\\frac{([^}]*)}{([^}]*)}', r'(\1)/(\2)', expression)
+    expression = re.sub(r'\\cdot', '*', expression)
+    expression = re.sub(r'\\times', '*', expression)
+    expression = re.sub(r'\\max\(', 'max(', expression)
+    expression = re.sub(r'\\min\(', 'min(', expression)
+    expression = re.sub(r'\\log\(', 'math.log(', expression)
+    expression = re.sub(r'\\ln\(', 'math.log(', expression)
+    
+    # Handle exponential notation carefully
+    expression = re.sub(r'e\^{([^}]*)}', r'math.exp(\1)', expression)
+    expression = re.sub(r'(\d+)e\^{([^}]*)}', r'\1*math.exp(\2)', expression)
+    
+    # Handle square roots and powers
+    expression = re.sub(r'\\sqrt{([^}]*)}', r'math.sqrt(\1)', expression)
+    expression = re.sub(r'\\sqrt\[([^\]]*)\]{(.*?)}', r'(\2)**(1/\1)', expression)
+    expression = re.sub(r'(\w+)\^\{?([^}]*)\}?', r'\1**\2', expression)
+    
+    # Remove remaining backslashes and whitespace
+    expression = re.sub(r'\\', '', expression)
+    expression = re.sub(r'\s+', '', expression)
+    
+    # Ensure proper operator spacing for evaluation
+    expression = re.sub(r'([a-zA-Z_])([0-9\(])', r'\1*\2', expression)  # var*number
+    expression = re.sub(r'([0-9\)])([a-zA-Z_])', r'\1*\2', expression)  # number*var
+    
+    return expression
+
+def handle_summations(expression):
+    """Handle summation notation \sum_{i=1}^{n} expression"""
+    # Pattern for \sum_{start}^{end} expression
+    pattern = r'\\sum_{([^}]*)}\^{([^}]*)}[\s]*([^\s]*)'
+    
+    def replace_sum(match):
+        var = match.group(1)
+        end = match.group(2)
+        expr = match.group(3)
+        
+        # Simple case: \sum_{i=1}^{n} i → sum(i for i in range(1, n+1))
+        if var.isalpha() and end.isdigit():
+            return f'sum({var} for {var} in range(1, {int(end)+1}))'
+        elif '=' in var:
+            # More complex: \sum_{i=1}^{n} → range from start to end
+            parts = var.split('=')
+            if len(parts) == 2:
+                var_name = parts[0].strip()
+                start_val = parts[1].strip()
+                return f'sum({expr} for {var_name} in range({start_val}, {int(end)+1}))'
+        
+        return f'sum({expr})'  # Fallback
+    
+    return re.sub(pattern, replace_sum, expression)
+
+def substitute_variables(expression, variables):
+    """Replace variable names with their values, handling complex names"""
+    # Sort variables by length (longest first) to avoid partial matches
+    sorted_vars = sorted(variables.keys(), key=len, reverse=True)
+    
+    for var_name in sorted_vars:
+        value = variables[var_name]
+        # Create regex pattern that matches the whole variable name
+        pattern = r'\b' + re.escape(var_name) + r'\b'
+        expression = re.sub(pattern, str(value), expression)
+    
+    return expression
+
+def safe_eval(expression):
+    """Safely evaluate mathematical expression with comprehensive function support"""
+    # Enhanced safe dictionary
+    safe_dict = {
+        'math': math,
+        'max': max,
+        'min': min,
+        'sum': sum,
+        'abs': abs,
+        'exp': math.exp,
+        'log': math.log,
+        'log10': math.log10,
+        'sqrt': math.sqrt,
+        'sin': math.sin,
+        'cos': math.cos,
+        'tan': math.tan,
+        'asin': math.asin,
+        'acos': math.acos,
+        'atan': math.atan,
+        'sinh': math.sinh,
+        'cosh': math.cosh,
+        'tanh': math.tanh,
+        'pi': math.pi,
+        'e': math.e,
+        'inf': float('inf'),
+        'Infinity': float('inf')
+    }
+    
+    # Add basic arithmetic functions
+    safe_dict.update({
+        '__builtins__': None,
+        'True': True,
+        'False': False,
+        'None': None
+    })
+    
+    try:
+        # Use ast.literal_eval for safer evaluation
+        import ast
+        
+        # First try to parse as a literal
+        try:
+            return ast.literal_eval(expression)
+        except (ValueError, SyntaxError):
+            # If not a simple literal, use eval with safe context
+            # Clean the expression
+            clean_expr = re.sub(r'[^a-zA-Z0-9_+\-*/().,=<>!&|^% ]', '', expression)
+            
+            # Handle special cases for financial formulas
+            clean_expr = clean_expr.replace('^', '**')
+            
+            return eval(clean_expr, safe_dict)
+            
+    except Exception as e:
+        # Fallback: try basic evaluation with error handling
+        try:
+            # Handle common financial notation
+            if 'E[' in expression or 'E(' in expression:
+                # Expected value notation - treat as variable
+                clean_expr = expression.replace('E[', 'E_').replace('E(', 'E_')
+                clean_expr = clean_expr.replace(']', '').replace(')', '')
+                return eval(clean_expr, safe_dict)
+            return float(expression)
+        except:
+            raise ValueError(f"Evaluation failed for: {expression}")
+
+# Helper function for complex summation cases
+def handle_complex_summation(expr, variables):
+    """Handle more complex summation cases that require variable substitution"""
+    # This would need to be expanded based on specific test cases
+    # For now, provide a basic implementation
+    if 'sum' in expr:
+        # Simple range-based summation
+        match = re.search(r'sum\(([^\)]+)\)', expr)
+        if match:
+            sum_expr = match.group(1)
+            # Try to evaluate the sum expression
+            try:
+                return safe_eval(sum_expr)
+            except:
+                return 0
+    return expr   
+
 @main_bp.route('/trading-formula', methods=['POST'])
 def trading_formula():
     data = request.get_json()
@@ -308,79 +478,31 @@ def trading_formula():
             # Evaluate safely
             result = safe_eval(expression)
             
-            # Round to 4 decimal places
-            result = round(result, 4)
+            # Round to 4 decimal places (handle very small numbers)
+            if abs(result) < 1e-10:
+                result = 0.0
+            result = round(float(result), 4)
             
             results.append({"result": result})
             
         except Exception as e:
-            # In case of error, return 0 or handle appropriately
+            print(f"Error evaluating {formula}: {e}")
             results.append({"result": 0.0})
     
     return jsonify(results)
 
-def preprocess_latex(latex_formula):
-    """Convert LaTeX formula to Python-compatible expression"""
-    expression = latex_formula
-    
-    # Remove $$ wrappers if present
-    expression = re.sub(r'^\$\$(.*?)\$\$$', r'\1', expression)
-    
-    # Remove assignment part if present (e.g., "Fee = ")
-    expression = re.sub(r'^[^=]*=', '', expression).strip()
-    
-    # Replace LaTeX commands
-    expression = re.sub(r'\\text{([^}]*)}', r'\1', expression)
-    expression = re.sub(r'\\frac{([^}]*)}{([^}]*)}', r'(\1)/(\2)', expression)
-    expression = re.sub(r'\\cdot', '*', expression)
-    expression = re.sub(r'\\times', '*', expression)
-    expression = re.sub(r'\\max\(', 'max(', expression)
-    expression = re.sub(r'\\min\(', 'min(', expression)
-    expression = re.sub(r'\\log\(', 'math.log(', expression)
-    expression = re.sub(r'\\ln\(', 'math.log(', expression)
-    expression = re.sub(r'e\^{([^}]*)}', r'math.exp(\1)', expression)
-    expression = re.sub(r'\\sum', 'sum', expression)
-    
-    # Handle special characters and formatting
-    expression = re.sub(r'\\', '', expression)
-    expression = re.sub(r'\s+', '', expression)
-    
-    return expression
-
-def substitute_variables(expression, variables):
-    """Replace variable names with their values"""
-    for var_name, value in variables.items():
-        # Handle variables with underscores and special characters
-        safe_var_name = re.escape(var_name)
-        expression = re.sub(r'\b' + safe_var_name + r'\b', str(value), expression)
-    return expression
-
-def safe_eval(expression):
-    """Safely evaluate mathematical expression"""
-    safe_dict = {
-        'math': math,
-        'max': max,
-        'min': min,
-        'sum': sum,
-        'exp': math.exp,
-        'log': math.log,
-        'log10': math.log10,
-        'sqrt': math.sqrt,
-        'sin': math.sin,
-        'cos': math.cos,
-        'tan': math.tan,
-        'pi': math.pi,
-        'e': math.e
+#######################################---FLAG---#############################################
+@main_bp.route('/chasetheflag', methods=['POST'])
+def chase_the_flag_main():
+    """
+    POST endpoint that returns flags for the chase the flag challenges
+    """
+    flags = {
+        "challenge1": "2-nOO9QiTIwXgNtWtBJezz8kv3SLc",
+        "challenge2": "your_actual_flag_2", 
+        "challenge3": "your_actual_flag_3",
+        "challenge4": "your_actual_flag_4",
+        "challenge5": "your_actual_flag_5"
     }
     
-    # Remove any potentially dangerous characters
-    safe_expression = re.sub(r'[^a-zA-Z0-9_+\-*/()., ]', '', expression)
-    
-    try:
-        return eval(safe_expression, {"__builtins__": None}, safe_dict)
-    except:
-        try:
-            return eval(safe_expression)
-        except:
-            raise ValueError(f"Could not evaluate expression: {expression}")
-        
+    return jsonify(flags)
