@@ -1,5 +1,6 @@
 from collections import defaultdict
 import heapq
+from typing import List
 from flask import Blueprint, jsonify, request
 from datetime import datetime
 import numpy as np
@@ -487,83 +488,85 @@ def chase_the_flag_main():
     return jsonify(flags)
 
 #######################################---investigate---#############################################
+class UnionFind:
+    def __init__(self):
+        self.parent = {}
+        self.rank = {}
+    
+    def find(self, x):
+        if x not in self.parent:
+            self.parent[x] = x
+            self.rank[x] = 0
+            return x
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+    
+    def union(self, x, y):
+        px, py = self.find(x), self.find(y)
+        if px == py:
+            return False  # Already connected, this edge creates a cycle
+        if self.rank[px] < self.rank[py]:
+            px, py = py, px
+        self.parent[py] = px
+        if self.rank[px] == self.rank[py]:
+            self.rank[px] += 1
+        return True
+
 def find_cycle_edges(network):
     """
-    Find all edges that are part of the single cycle in the network.
-    Since there's only one cycle (tree + one edge), we find it using DFS.
+    Fast cycle detection using Union-Find.
+    Since there's exactly one cycle, we build MST and find the extra edge,
+    then reconstruct the cycle efficiently.
     """
     if not network:
         return []
     
-    # Build adjacency list and spy mapping
-    spy_to_id = {}
-    spy_id = 0
-    graph = defaultdict(list)
-    edge_map = {}  # Maps (id1, id2) to original edge
+    # Use Union-Find to detect the cycle-forming edge
+    uf = UnionFind()
+    tree_edges = []
+    cycle_edge = None
     
     for connection in network:
         spy1, spy2 = connection['spy1'], connection['spy2']
-        
-        if spy1 not in spy_to_id:
-            spy_to_id[spy1] = spy_id
-            spy_id += 1
-        if spy2 not in spy_to_id:
-            spy_to_id[spy2] = spy_id
-            spy_id += 1
-        
-        id1, id2 = spy_to_id[spy1], spy_to_id[spy2]
-        graph[id1].append(id2)
-        graph[id2].append(id1)
-        
-        # Store edge mapping (ensure consistent ordering)
-        key = (min(id1, id2), max(id1, id2))
-        edge_map[key] = connection
+        if not uf.union(spy1, spy2):
+            # This edge creates the cycle
+            cycle_edge = connection
+        else:
+            tree_edges.append(connection)
     
-    # DFS to find cycle
-    visited = [False] * spy_id
-    parent = [-1] * spy_id
-    cycle_edges = []
+    if not cycle_edge:
+        return []  # No cycle found
     
-    def dfs(node, par):
-        visited[node] = True
-        parent[node] = par
+    # Now we need to find the path between the two nodes of the cycle edge
+    # using only tree edges, then add the cycle edge to complete the cycle
+    
+    # Build adjacency list from tree edges only
+    graph = defaultdict(list)
+    for edge in tree_edges:
+        spy1, spy2 = edge['spy1'], edge['spy2']
+        graph[spy1].append((spy2, edge))
+        graph[spy2].append((spy1, edge))
+    
+    # Find path between cycle edge endpoints using BFS
+    start, end = cycle_edge['spy1'], cycle_edge['spy2']
+    queue = [(start, [])]
+    visited = {start}
+    path_edges = []
+    
+    while queue:
+        node, path = queue.pop(0)
+        if node == end:
+            path_edges = path
+            break
         
-        for neighbor in graph[node]:
-            if neighbor == par:  # Skip the edge we came from
-                continue
-            
-            if visited[neighbor]:
-                # Found back edge - this creates the cycle
-                # Reconstruct cycle path
-                cycle_path = []
-                current = node
-                while current != neighbor:
-                    cycle_path.append(current)
-                    current = parent[current]
-                cycle_path.append(neighbor)
-                cycle_path.append(node)  # Complete the cycle
-                
-                # Convert cycle path to edges
-                for i in range(len(cycle_path)):
-                    id1 = cycle_path[i]
-                    id2 = cycle_path[(i + 1) % len(cycle_path)]
-                    key = (min(id1, id2), max(id1, id2))
-                    if key in edge_map:
-                        cycle_edges.append(edge_map[key])
-                
-                return True
-            else:
-                if dfs(neighbor, node):
-                    return True
-        
-        return False
+        for neighbor, edge in graph[node]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append((neighbor, path + [edge]))
     
-    # Start DFS from any node
-    for start_node in range(spy_id):
-        if not visited[start_node]:
-            if dfs(start_node, -1):
-                break
-    
+    # The cycle consists of the path edges + the cycle edge
+    cycle_edges = path_edges + [cycle_edge]
     return cycle_edges
 
 @main_bp.route('/investigate', methods=['POST'])
@@ -591,3 +594,289 @@ def investigate():
     return jsonify({
         "networks": result_networks
     })
+
+# Challenge 1: Transformation functions and their inverses
+def mirror_words(x: str) -> str:
+    """Reverse each word in the sentence"""
+    return ' '.join([word[::-1] for word in x.split()])
+
+def encode_mirror_alphabet(x: str) -> str:
+    """Replace each letter with its mirror in the alphabet"""
+    result = []
+    for char in x:
+        if char.isalpha():
+            if char.islower():
+                result.append(chr(219 - ord(char)))  # a=97, z=122 -> 219-97=122, 219-122=97
+            else:
+                result.append(chr(155 - ord(char)))  # A=65, Z=90 -> 155-65=90, 155-90=65
+        else:
+            result.append(char)
+    return ''.join(result)
+
+def toggle_case(x: str) -> str:
+    """Switch uppercase to lowercase and vice versa"""
+    return x.swapcase()
+
+def swap_pairs(x: str) -> str:
+    """Swap characters in pairs within each word"""
+    words = x.split()
+    result = []
+    for word in words:
+        swapped = []
+        for i in range(0, len(word) - 1, 2):
+            swapped.extend([word[i+1], word[i]])
+        if len(word) % 2 == 1:
+            swapped.append(word[-1])
+        result.append(''.join(swapped))
+    return ' '.join(result)
+
+def encode_index_parity(x: str) -> str:
+    """Rearrange each word: even indices first, then odd indices"""
+    words = x.split()
+    result = []
+    for word in words:
+        evens = [word[i] for i in range(0, len(word), 2)]
+        odds = [word[i] for i in range(1, len(word), 2)]
+        result.append(''.join(evens + odds))
+    return ' '.join(result)
+
+def double_consonants(x: str) -> str:
+    """Double every consonant"""
+    vowels = 'aeiouAEIOU'
+    result = []
+    for char in x:
+        result.append(char)
+        if char.isalpha() and char not in vowels:
+            result.append(char)
+    return ''.join(result)
+
+# Inverse functions for challenge 1
+def inverse_mirror_words(x: str) -> str:
+    return mirror_words(x)  # Same as forward
+
+def inverse_encode_mirror_alphabet(x: str) -> str:
+    return encode_mirror_alphabet(x)  # Same as forward (involution)
+
+def inverse_toggle_case(x: str) -> str:
+    return toggle_case(x)  # Same as forward (involution)
+
+def inverse_swap_pairs(x: str) -> str:
+    return swap_pairs(x)  # Same as forward (involution)
+
+def inverse_encode_index_parity(x: str) -> str:
+    """Inverse of encode_index_parity"""
+    words = x.split()
+    result = []
+    for word in words:
+        mid = math.ceil(len(word) / 2)
+        evens = word[:mid]
+        odds = word[mid:]
+        reconstructed = []
+        for i in range(len(word)):
+            if i % 2 == 0:
+                reconstructed.append(evens[i//2] if i//2 < len(evens) else '')
+            else:
+                reconstructed.append(odds[i//2] if i//2 < len(odds) else '')
+        result.append(''.join(reconstructed))
+    return ' '.join(result)
+
+def inverse_double_consonants(x: str) -> str:
+    """Remove doubled consonants"""
+    vowels = 'aeiouAEIOU'
+    result = []
+    i = 0
+    while i < len(x):
+        result.append(x[i])
+        if (i + 1 < len(x) and x[i] == x[i+1] and 
+            x[i].isalpha() and x[i] not in vowels):
+            i += 1  # Skip the duplicate
+        i += 1
+    return ''.join(result)
+
+# Challenge 2: Coordinate pattern analysis
+def analyze_coordinates(coordinates: List[List[str]]) -> str:
+    """Extract hidden parameter from coordinate pattern"""
+    # Convert to floats and filter outliers
+    coords = [(float(lat), float(lng)) for lat, lng in coordinates]
+    
+    # Simple approach: look for pattern in decimal parts
+    # This is a placeholder - actual implementation depends on the pattern
+    decimal_pattern = []
+    for lat, lng in coords:
+        lat_dec = abs(lat) - int(abs(lat))
+        lng_dec = abs(lng) - int(abs(lng))
+        decimal_pattern.extend([lat_dec, lng_dec])
+    
+    # Convert decimals to digits (simplified)
+    hidden_number = ''.join(str(int(d * 10)) for d in decimal_pattern)
+    return hidden_number
+
+# Challenge 3: Cipher decryption
+def decrypt_railfence(text: str, rails: int = 3) -> str:
+    """Decrypt rail fence cipher"""
+    length = len(text)
+    fence = [['\n' for _ in range(length)] for _ in range(rails)]
+    rail = 0
+    direction = 1
+    
+    # Mark positions with '*'
+    for i in range(length):
+        fence[rail][i] = '*'
+        rail += direction
+        if rail == 0 or rail == rails - 1:
+            direction = -direction
+    
+    # Fill the fence with cipher text
+    index = 0
+    for i in range(rails):
+        for j in range(length):
+            if fence[i][j] == '*' and index < length:
+                fence[i][j] = text[index]
+                index += 1
+    
+    # Read the plain text
+    result = []
+    rail = 0
+    direction = 1
+    for i in range(length):
+        result.append(fence[rail][i])
+        rail += direction
+        if rail == 0 or rail == rails - 1:
+            direction = -direction
+    
+    return ''.join(result)
+
+def decrypt_keyword(text: str, keyword: str = "SHADOW") -> str:
+    """Decrypt keyword substitution cipher"""
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    # Remove duplicates from keyword and create cipher alphabet
+    key = ''.join(dict.fromkeys(keyword.upper()))
+    cipher_alphabet = key + ''.join([c for c in alphabet if c not in key])
+    
+    # Create mapping from cipher to normal alphabet
+    mapping = {cipher: normal for cipher, normal in zip(cipher_alphabet, alphabet)}
+    
+    result = []
+    for char in text.upper():
+        if char in mapping:
+            result.append(mapping[char])
+        else:
+            result.append(char)
+    
+    return ''.join(result)
+
+def decrypt_polybius(text: str) -> str:
+    """Decrypt Polybius square cipher"""
+    polybius_square = {
+        'A': '11', 'B': '12', 'C': '13', 'D': '14', 'E': '15',
+        'F': '21', 'G': '22', 'H': '23', 'I': '24', 'J': '24', 'K': '25',
+        'L': '31', 'M': '32', 'N': '33', 'O': '34', 'P': '35',
+        'Q': '41', 'R': '42', 'S': '43', 'T': '44', 'U': '45',
+        'V': '51', 'W': '52', 'X': '53', 'Y': '54', 'Z': '55'
+    }
+    
+    # Reverse mapping
+    reverse_mapping = {v: k for k, v in polybius_square.items()}
+    
+    result = []
+    # Split text into pairs of digits
+    for i in range(0, len(text), 2):
+        if i + 1 < len(text):
+            pair = text[i:i+2]
+            if pair in reverse_mapping:
+                result.append(reverse_mapping[pair])
+            else:
+                result.append('?')
+        else:
+            result.append(text[i])
+    
+    return ''.join(result)
+
+def parse_and_decrypt_log(log_entry: str) -> str:
+    """Parse log entry and decrypt based on cipher type"""
+    # Extract cipher type and encrypted payload
+    cipher_match = re.search(r'CIPHER_TYPE: (\w+)', log_entry)
+    payload_match = re.search(r'ENCRYPTED_PAYLOAD: (\w+)', log_entry)
+    
+    if not cipher_match or not payload_match:
+        return "ERROR: Could not parse log entry"
+    
+    cipher_type = cipher_match.group(1)
+    encrypted_payload = payload_match.group(1)
+    
+    # Decrypt based on cipher type
+    if cipher_type == "RAILFENCE":
+        return decrypt_railfence(encrypted_payload)
+    elif cipher_type == "KEYWORD":
+        return decrypt_keyword(encrypted_payload)
+    elif cipher_type == "POLYBIUS":
+        return decrypt_polybius(encrypted_payload)
+    else:
+        return f"ERROR: Unknown cipher type {cipher_type}"
+
+# Challenge 4: Final decryption (placeholder - depends on previous results)
+def decrypt_final_message(challenge1: str, challenge2: str, challenge3: str) -> str:
+    """Combine all components for final decryption"""
+    # This would be specific to the actual encryption scheme
+    # For now, just combine them as a placeholder
+    return f"{challenge1}_{challenge2}_{challenge3}"
+
+@main_bp.route('/operation-safeguard', methods=['POST'])
+def operation_safeguard():
+    """
+    POST endpoint for Operation Safeguard challenge
+    """
+    try:
+        data = request.get_json()
+        
+        # Challenge 1: Reverse transformations
+        transformations_str = data['challenge_one']['transformations']
+        transformed_word = data['challenge_one']['transformed_encrypted_word']
+        
+        # Parse transformations list
+        transformations = re.findall(r'(\w+)\(x\)', transformations_str)
+        transformations.reverse()  # Apply in reverse order
+        
+        # Apply inverse transformations
+        current_word = transformed_word
+        for transform in transformations:
+            if transform == 'mirror_words':
+                current_word = inverse_mirror_words(current_word)
+            elif transform == 'encode_mirror_alphabet':
+                current_word = inverse_encode_mirror_alphabet(current_word)
+            elif transform == 'toggle_case':
+                current_word = inverse_toggle_case(current_word)
+            elif transform == 'swap_pairs':
+                current_word = inverse_swap_pairs(current_word)
+            elif transform == 'encode_index_parity':
+                current_word = inverse_encode_index_parity(current_word)
+            elif transform == 'double_consonants':
+                current_word = inverse_double_consonants(current_word)
+        
+        challenge1_result = current_word
+        
+        # Challenge 2: Coordinate pattern analysis
+        coordinates = data['challenge_two']
+        challenge2_result = analyze_coordinates(coordinates)
+        
+        # Challenge 3: Log decryption
+        log_entry = data['challenge_three']
+        challenge3_result = parse_and_decrypt_log(log_entry)
+        
+        # Challenge 4: Final decryption
+        challenge4_result = decrypt_final_message(
+            challenge1_result, challenge2_result, challenge3_result
+        )
+        
+        response = {
+            "challenge_one": challenge1_result,
+            "challenge_two": challenge2_result,
+            "challenge_three": challenge3_result,
+            "challenge_four": challenge4_result
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
