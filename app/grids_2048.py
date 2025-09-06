@@ -9,11 +9,14 @@ def process_2048_move(grid, direction):
     
     rows = len(grid)
     cols = len(grid[0]) if rows > 0 else 0
-    
-    # Convert all cells into clean types
-    next_grid = [[convert_value(cell) for cell in row] for row in grid]
+
+    # Normalize grid
+    current_grid = [[convert_value(cell) for cell in row] for row in grid]
+
+    # Deep copy before trying move
+    next_grid = [row[:] for row in current_grid]
+
     moved = False
-    
     if direction == "LEFT":
         moved = move_left_advanced(next_grid, rows, cols)
     elif direction == "RIGHT":
@@ -22,16 +25,16 @@ def process_2048_move(grid, direction):
         moved = move_up_advanced(next_grid, rows, cols)
     elif direction == "DOWN":
         moved = move_down_advanced(next_grid, rows, cols)
-    
-    # Add new tile if move happened
+
     if moved and has_empty_cell(next_grid, rows, cols):
         next_grid = add_random_tile(next_grid, rows, cols)
-    
+        end_game = check_game_status_advanced(next_grid, rows, cols)
+    else:
+        # ❗ No move → don’t recalc, just check current board
+        end_game = check_game_status_advanced(current_grid, rows, cols)
+        next_grid = current_grid  # keep board unchanged
 
-    end_game = check_game_status_advanced(next_grid, rows, cols)
-    
     return next_grid, end_game
-
 
 # ---------- Helpers ----------
 
