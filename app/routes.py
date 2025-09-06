@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import UnivariateSpline
 import math
+import re
 
 main_bp = Blueprint('main', __name__)
 
@@ -309,3 +310,100 @@ def princess_diaries():
     }
     
     return jsonify(response)
+
+
+
+@main_bp.route('/trading-formula', methods=['POST'])
+def trading_formula():
+    data = request.get_json()
+    results = []
+    
+    for test_case in data:
+        formula = test_case['formula']
+        variables = test_case['variables']
+        
+        try:
+            # Preprocess LaTeX formula
+            expression = preprocess_latex(formula)
+            
+            # Substitute variable values
+            expression = substitute_variables(expression, variables)
+            
+            # Evaluate safely
+            result = safe_eval(expression)
+            
+            # Round to 4 decimal places
+            result = round(result, 4)
+            
+            results.append({"result": result})
+            
+        except Exception as e:
+            # In case of error, return 0 or handle appropriately
+            results.append({"result": 0.0})
+    
+    return jsonify(results)
+
+def preprocess_latex(latex_formula):
+    """Convert LaTeX formula to Python-compatible expression"""
+    expression = latex_formula
+    
+    # Remove $$ wrappers if present
+    expression = re.sub(r'^\$\$(.*?)\$\$$', r'\1', expression)
+    
+    # Remove assignment part if present (e.g., "Fee = ")
+    expression = re.sub(r'^[^=]*=', '', expression).strip()
+    
+    # Replace LaTeX commands
+    expression = re.sub(r'\\text{([^}]*)}', r'\1', expression)
+    expression = re.sub(r'\\frac{([^}]*)}{([^}]*)}', r'(\1)/(\2)', expression)
+    expression = re.sub(r'\\cdot', '*', expression)
+    expression = re.sub(r'\\times', '*', expression)
+    expression = re.sub(r'\\max\(', 'max(', expression)
+    expression = re.sub(r'\\min\(', 'min(', expression)
+    expression = re.sub(r'\\log\(', 'math.log(', expression)
+    expression = re.sub(r'\\ln\(', 'math.log(', expression)
+    expression = re.sub(r'e\^{([^}]*)}', r'math.exp(\1)', expression)
+    expression = re.sub(r'\\sum', 'sum', expression)
+    
+    # Handle special characters and formatting
+    expression = re.sub(r'\\', '', expression)
+    expression = re.sub(r'\s+', '', expression)
+    
+    return expression
+
+def substitute_variables(expression, variables):
+    """Replace variable names with their values"""
+    for var_name, value in variables.items():
+        # Handle variables with underscores and special characters
+        safe_var_name = re.escape(var_name)
+        expression = re.sub(r'\b' + safe_var_name + r'\b', str(value), expression)
+    return expression
+
+def safe_eval(expression):
+    """Safely evaluate mathematical expression"""
+    safe_dict = {
+        'math': math,
+        'max': max,
+        'min': min,
+        'sum': sum,
+        'exp': math.exp,
+        'log': math.log,
+        'log10': math.log10,
+        'sqrt': math.sqrt,
+        'sin': math.sin,
+        'cos': math.cos,
+        'tan': math.tan,
+        'pi': math.pi,
+        'e': math.e
+    }
+    
+    # Remove any potentially dangerous characters
+    safe_expression = re.sub(r'[^a-zA-Z0-9_+\-*/()., ]', '', expression)
+    
+    try:
+        return eval(safe_expression, {"__builtins__": None}, safe_dict)
+    except:
+        try:
+            return eval(safe_expression)
+        except:
+            raise ValueError(f"Could not evaluate expression: {expression}")
