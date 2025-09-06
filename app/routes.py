@@ -291,205 +291,184 @@ def princess_diaries():
     
     return jsonify(response)
 
-#######################################---TRADING---#############################################
-def preprocess_latex(latex_formula):
-    """Convert LaTeX formula to Python-compatible expression"""
-    expression = latex_formula.strip()
+#########################################---TRADING---###########################################
+class LaTeXFormulaEvaluator:
+    def __init__(self):
+        # Precompiled regex patterns for better performance
+        self.patterns = {
+            'dollar_signs': re.compile(r'\$\$'),
+            'text_commands': re.compile(r'\\text\{([^}]+)\}'),
+            'frac': re.compile(r'\\frac\{([^}]+)\}\{([^}]+)\}'),
+            'max_min': re.compile(r'\\(max|min)\s*\(([^)]+)\)'),
+            'cdot': re.compile(r'\\cdot'),
+            'times': re.compile(r'\\times'),
+            'sum': re.compile(r'\\sum'),
+            'log': re.compile(r'\\log\s*\(([^)]+)\)'),
+            'exp': re.compile(r'e\^\{([^}]+)\}'),
+            'exp_simple': re.compile(r'e\^([a-zA-Z_]\w*)'),
+            'subscript': re.compile(r'([a-zA-Z_]\w*)_\{([^}]+)\}'),
+            'subscript_simple': re.compile(r'([a-zA-Z_]\w*)_([a-zA-Z_]\w*)'),
+            'variable': re.compile(r'[a-zA-Z_]\w*'),
+            'whitespace': re.compile(r'\s+'),
+            'assignment': re.compile(r'^([^=]+)\s*=\s*(.+)$'),
+            'bracket_var': re.compile(r'([a-zA-Z_]\w*)\[([^\]]+)\]')
+        }
     
-    # Remove $$ wrappers if present
-    if expression.startswith('$$') and expression.endswith('$$'):
-        expression = expression[2:-2].strip()
-    
-    # Remove assignment part if present (e.g., "Fee = ")
-    if '=' in expression:
-        parts = expression.split('=', 1)
-        if len(parts) > 1:
-            expression = parts[1].strip()
-    
-    # Step 1: Handle summations first (most complex)
-    expression = handle_summations(expression)
-    
-    # Step 2: Replace other LaTeX commands
-    expression = re.sub(r'\\text{([^}]*)}', r'\1', expression)
-    expression = re.sub(r'\\frac{([^}]*)}{([^}]*)}', r'(\1)/(\2)', expression)
-    expression = re.sub(r'\\cdot', '*', expression)
-    expression = re.sub(r'\\times', '*', expression)
-    expression = re.sub(r'\\max\(', 'max(', expression)
-    expression = re.sub(r'\\min\(', 'min(', expression)
-    expression = re.sub(r'\\log\(', 'math.log(', expression)
-    expression = re.sub(r'\\ln\(', 'math.log(', expression)
-    
-    # Handle exponential notation carefully
-    expression = re.sub(r'e\^{([^}]*)}', r'math.exp(\1)', expression)
-    expression = re.sub(r'(\d+)e\^{([^}]*)}', r'\1*math.exp(\2)', expression)
-    
-    # Handle square roots and powers
-    expression = re.sub(r'\\sqrt{([^}]*)}', r'math.sqrt(\1)', expression)
-    expression = re.sub(r'\\sqrt\[([^\]]*)\]{(.*?)}', r'(\2)**(1/\1)', expression)
-    expression = re.sub(r'(\w+)\^\{?([^}]*)\}?', r'\1**\2', expression)
-    
-    # Remove remaining backslashes and whitespace
-    expression = re.sub(r'\\', '', expression)
-    expression = re.sub(r'\s+', '', expression)
-    
-    # Ensure proper operator spacing for evaluation
-    expression = re.sub(r'([a-zA-Z_])([0-9\(])', r'\1*\2', expression)  # var*number
-    expression = re.sub(r'([0-9\)])([a-zA-Z_])', r'\1*\2', expression)  # number*var
-    
-    return expression
-
-def handle_summations(expression):
-    """Handle summation notation \sum_{i=1}^{n} expression"""
-    # Pattern for \sum_{start}^{end} expression
-    pattern = r'\\sum_{([^}]*)}\^{([^}]*)}[\s]*([^\s]*)'
-    
-    def replace_sum(match):
-        var = match.group(1)
-        end = match.group(2)
-        expr = match.group(3)
+    def preprocess_formula(self, formula):
+        """Clean and normalize the LaTeX formula"""
+        # Remove $$ markers
+        formula = self.patterns['dollar_signs'].sub('', formula)
         
-        # Simple case: \sum_{i=1}^{n} i → sum(i for i in range(1, n+1))
-        if var.isalpha() and end.isdigit():
-            return f'sum({var} for {var} in range(1, {int(end)+1}))'
-        elif '=' in var:
-            # More complex: \sum_{i=1}^{n} → range from start to end
-            parts = var.split('=')
-            if len(parts) == 2:
-                var_name = parts[0].strip()
-                start_val = parts[1].strip()
-                return f'sum({expr} for {var_name} in range({start_val}, {int(end)+1}))'
-        
-        return f'sum({expr})'  # Fallback
-    
-    return re.sub(pattern, replace_sum, expression)
-
-def substitute_variables(expression, variables):
-    """Replace variable names with their values, handling complex names"""
-    # Sort variables by length (longest first) to avoid partial matches
-    sorted_vars = sorted(variables.keys(), key=len, reverse=True)
-    
-    for var_name in sorted_vars:
-        value = variables[var_name]
-        # Create regex pattern that matches the whole variable name
-        pattern = r'\b' + re.escape(var_name) + r'\b'
-        expression = re.sub(pattern, str(value), expression)
-    
-    return expression
-
-def safe_eval(expression):
-    """Safely evaluate mathematical expression with comprehensive function support"""
-    # Enhanced safe dictionary
-    safe_dict = {
-        'math': math,
-        'max': max,
-        'min': min,
-        'sum': sum,
-        'abs': abs,
-        'exp': math.exp,
-        'log': math.log,
-        'log10': math.log10,
-        'sqrt': math.sqrt,
-        'sin': math.sin,
-        'cos': math.cos,
-        'tan': math.tan,
-        'asin': math.asin,
-        'acos': math.acos,
-        'atan': math.atan,
-        'sinh': math.sinh,
-        'cosh': math.cosh,
-        'tanh': math.tanh,
-        'pi': math.pi,
-        'e': math.e,
-        'inf': float('inf'),
-        'Infinity': float('inf')
-    }
-    
-    # Add basic arithmetic functions
-    safe_dict.update({
-        '__builtins__': None,
-        'True': True,
-        'False': False,
-        'None': None
-    })
-    
-    try:
-        # Use ast.literal_eval for safer evaluation
-        import ast
-        
-        # First try to parse as a literal
-        try:
-            return ast.literal_eval(expression)
-        except (ValueError, SyntaxError):
-            # If not a simple literal, use eval with safe context
-            # Clean the expression
-            clean_expr = re.sub(r'[^a-zA-Z0-9_+\-*/().,=<>!&|^% ]', '', expression)
-            
-            # Handle special cases for financial formulas
-            clean_expr = clean_expr.replace('^', '**')
-            
-            return eval(clean_expr, safe_dict)
-            
-    except Exception as e:
-        # Fallback: try basic evaluation with error handling
-        try:
-            # Handle common financial notation
-            if 'E[' in expression or 'E(' in expression:
-                # Expected value notation - treat as variable
-                clean_expr = expression.replace('E[', 'E_').replace('E(', 'E_')
-                clean_expr = clean_expr.replace(']', '').replace(')', '')
-                return eval(clean_expr, safe_dict)
-            return float(expression)
-        except:
-            raise ValueError(f"Evaluation failed for: {expression}")
-
-# Helper function for complex summation cases
-def handle_complex_summation(expr, variables):
-    """Handle more complex summation cases that require variable substitution"""
-    # This would need to be expanded based on specific test cases
-    # For now, provide a basic implementation
-    if 'sum' in expr:
-        # Simple range-based summation
-        match = re.search(r'sum\(([^\)]+)\)', expr)
+        # Handle assignment equations (extract right side)
+        match = self.patterns['assignment'].match(formula.strip())
         if match:
-            sum_expr = match.group(1)
-            # Try to evaluate the sum expression
-            try:
-                return safe_eval(sum_expr)
-            except:
-                return 0
-    return expr   
+            formula = match.group(2).strip()
+        
+        # Convert \text{Variable} to Variable
+        formula = self.patterns['text_commands'].sub(r'\1', formula)
+        
+        # Convert fractions: \frac{a}{b} -> (a)/(b)
+        def replace_frac(match):
+            numerator = match.group(1)
+            denominator = match.group(2)
+            return f'({numerator})/({denominator})'
+        formula = self.patterns['frac'].sub(replace_frac, formula)
+        
+        # Convert max/min functions
+        def replace_max_min(match):
+            func = match.group(1)
+            args = match.group(2)
+            return f'{func}({args})'
+        formula = self.patterns['max_min'].sub(replace_max_min, formula)
+        
+        # Convert multiplication symbols
+        formula = self.patterns['cdot'].sub('*', formula)
+        formula = self.patterns['times'].sub('*', formula)
+        
+        # Handle exponentials: e^{x} -> exp(x)
+        def replace_exp(match):
+            exponent = match.group(1)
+            return f'exp({exponent})'
+        formula = self.patterns['exp'].sub(replace_exp, formula)
+        formula = self.patterns['exp_simple'].sub(r'exp(\1)', formula)
+        
+        # Handle logarithms: \log(x) -> log(x)
+        formula = self.patterns['log'].sub(r'log(\1)', formula)
+        
+        # Handle subscripts: Variable_subscript -> Variable_subscript
+        formula = self.patterns['subscript'].sub(r'\1_\2', formula)
+        formula = self.patterns['subscript_simple'].sub(r'\1_\2', formula)
+        
+        # Handle bracket notation: E[R_m] -> E_R_m
+        formula = self.patterns['bracket_var'].sub(r'\1_\2', formula)
+        
+        # Remove extra whitespace
+        formula = self.patterns['whitespace'].sub(' ', formula).strip()
+        
+        return formula
+    
+    def substitute_variables(self, formula, variables):
+        """Replace variables in formula with their values"""
+        # Sort variables by length (descending) to avoid partial replacements
+        sorted_vars = sorted(variables.keys(), key=len, reverse=True)
+        
+        for var in sorted_vars:
+            value = variables[var]
+            # Use word boundaries to avoid partial replacements
+            pattern = r'\b' + re.escape(var) + r'\b'
+            formula = re.sub(pattern, str(value), formula)
+        
+        return formula
+    
+    def safe_eval(self, expression):
+        """Safely evaluate mathematical expressions"""
+        # Define allowed functions and constants
+        allowed_names = {
+            '__builtins__': {},
+            'abs': abs,
+            'max': max,
+            'min': min,
+            'sum': sum,
+            'exp': math.exp,
+            'log': math.log,
+            'sqrt': math.sqrt,
+            'sin': math.sin,
+            'cos': math.cos,
+            'tan': math.tan,
+            'pi': math.pi,
+            'e': math.e,
+        }
+        
+        try:
+            result = eval(expression, allowed_names)
+            return float(result)
+        except Exception as e:
+            raise ValueError(f"Error evaluating expression '{expression}': {str(e)}")
+    
+    def evaluate(self, formula, variables):
+        """Main evaluation function"""
+        try:
+            # Step 1: Preprocess the formula
+            processed_formula = self.preprocess_formula(formula)
+            
+            # Step 2: Substitute variables
+            substituted_formula = self.substitute_variables(processed_formula, variables)
+            
+            # Step 3: Evaluate the expression
+            result = self.safe_eval(substituted_formula)
+            
+            # Step 4: Round to 4 decimal places
+            return round(result, 4)
+            
+        except Exception as e:
+            raise ValueError(f"Failed to evaluate formula '{formula}': {str(e)}")
+
+evaluator = LaTeXFormulaEvaluator()
 
 @main_bp.route('/trading-formula', methods=['POST'])
 def trading_formula():
-    data = request.get_json()
-    results = []
-    
-    for test_case in data:
-        formula = test_case['formula']
-        variables = test_case['variables']
+    """
+    Endpoint to evaluate LaTeX formulas for financial calculations
+    """
+    try:
+        # Get JSON data from request
+        data = request.get_json()
         
-        try:
-            # Preprocess LaTeX formula
-            expression = preprocess_latex(formula)
-            
-            # Substitute variable values
-            expression = substitute_variables(expression, variables)
-            
-            # Evaluate safely
-            result = safe_eval(expression)
-            
-            # Round to 4 decimal places (handle very small numbers)
-            if abs(result) < 1e-10:
-                result = 0.0
-            result = round(float(result), 4)
-            
-            results.append({"result": result})
-            
-        except Exception as e:
-            print(f"Error evaluating {formula}: {e}")
-            results.append({"result": 0.0})
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        if not isinstance(data, list):
+            return jsonify({'error': 'Expected JSON array'}), 400
+        
+        results = []
+        
+        # Process each test case
+        for i, test_case in enumerate(data):
+            try:
+                # Validate test case structure
+                if not all(key in test_case for key in ['name', 'formula', 'variables', 'type']):
+                    return jsonify({'error': f'Missing required fields in test case {i+1}'}), 400
+                
+                if test_case['type'] != 'compute':
+                    return jsonify({'error': f'Unsupported type "{test_case["type"]}" in test case {i+1}'}), 400
+                
+                # Extract data
+                formula = test_case['formula']
+                variables = test_case['variables']
+                
+                # Evaluate the formula
+                result = evaluator.evaluate(formula, variables)
+                
+                # Append result
+                results.append({'result': result})
+                
+            except Exception as e:
+                return jsonify({'error': f'Error processing test case {i+1} ({test_case.get("name", "unnamed")}): {str(e)}'}), 400
+        
+        return jsonify(results)
     
-    return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 #######################################---FLAG---#############################################
 @main_bp.route('/chasetheflag', methods=['POST'])
@@ -506,3 +485,109 @@ def chase_the_flag_main():
     }
     
     return jsonify(flags)
+
+#######################################---investigate---#############################################
+def find_cycle_edges(network):
+    """
+    Find all edges that are part of the single cycle in the network.
+    Since there's only one cycle (tree + one edge), we find it using DFS.
+    """
+    if not network:
+        return []
+    
+    # Build adjacency list and spy mapping
+    spy_to_id = {}
+    spy_id = 0
+    graph = defaultdict(list)
+    edge_map = {}  # Maps (id1, id2) to original edge
+    
+    for connection in network:
+        spy1, spy2 = connection['spy1'], connection['spy2']
+        
+        if spy1 not in spy_to_id:
+            spy_to_id[spy1] = spy_id
+            spy_id += 1
+        if spy2 not in spy_to_id:
+            spy_to_id[spy2] = spy_id
+            spy_id += 1
+        
+        id1, id2 = spy_to_id[spy1], spy_to_id[spy2]
+        graph[id1].append(id2)
+        graph[id2].append(id1)
+        
+        # Store edge mapping (ensure consistent ordering)
+        key = (min(id1, id2), max(id1, id2))
+        edge_map[key] = connection
+    
+    # DFS to find cycle
+    visited = [False] * spy_id
+    parent = [-1] * spy_id
+    cycle_edges = []
+    
+    def dfs(node, par):
+        visited[node] = True
+        parent[node] = par
+        
+        for neighbor in graph[node]:
+            if neighbor == par:  # Skip the edge we came from
+                continue
+            
+            if visited[neighbor]:
+                # Found back edge - this creates the cycle
+                # Reconstruct cycle path
+                cycle_path = []
+                current = node
+                while current != neighbor:
+                    cycle_path.append(current)
+                    current = parent[current]
+                cycle_path.append(neighbor)
+                cycle_path.append(node)  # Complete the cycle
+                
+                # Convert cycle path to edges
+                for i in range(len(cycle_path)):
+                    id1 = cycle_path[i]
+                    id2 = cycle_path[(i + 1) % len(cycle_path)]
+                    key = (min(id1, id2), max(id1, id2))
+                    if key in edge_map:
+                        cycle_edges.append(edge_map[key])
+                
+                return True
+            else:
+                if dfs(neighbor, node):
+                    return True
+        
+        return False
+    
+    # Start DFS from any node
+    for start_node in range(spy_id):
+        if not visited[start_node]:
+            if dfs(start_node, -1):
+                break
+    
+    return cycle_edges
+
+@main_bp.route('/investigate', methods=['POST'])
+def investigate():
+    """
+    POST endpoint to find all extra channels (edges that are part of the single cycle)
+    in spy networks to remove cycles.
+    """
+    data = request.get_json()
+    networks = data['networks']
+    
+    result_networks = []
+    
+    for network_data in networks:
+        network_id = network_data['networkId']
+        network = network_data['network']
+        
+        extra_channels = find_cycle_edges(network)
+        
+        result_networks.append({
+            "networkId": network_id,
+            "extraChannels": extra_channels
+        })
+    
+    return jsonify({
+        "networks": result_networks
+    })
