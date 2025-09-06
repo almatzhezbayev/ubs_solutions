@@ -1369,7 +1369,7 @@ def merge_intervals(intervals):
     
     return merged
 
-@main_bp.route('/sailing-club', methods=['POST'])
+@main_bp.route('/sailing-club/submission', methods=['POST'])
 def sailing_club_submission():
     try:
         data = request.get_json()
