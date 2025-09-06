@@ -14,13 +14,6 @@ from PIL import Image
 import cv2
 import io
 import networkx as nx
-import random
-from copy import deepcopy
-import json
-from app.grids_2048 import process_2048_move
-import logging
-
-from app.duolingo import detect_language_and_convert, roman_to_int
 
 main_bp = Blueprint('main', __name__)
 
@@ -1325,6 +1318,27 @@ def mst_calculation():
         return jsonify({'error': str(e)}), 500
 
 #######################################---SAILING---#############################################
+# def merge_intervals(intervals):
+#     """
+#     Merge overlapping intervals and return sorted result.
+#     """
+#     if not intervals:
+#         return []
+    
+#     # Sort intervals by start time
+#     intervals.sort(key=lambda x: x[0])
+    
+#     merged = []
+#     for start, end in intervals:
+#         # If merged is empty or current interval doesn't overlap with the last one
+#         if not merged or merged[-1][1] < start:
+#             merged.append([start, end])
+#         else:
+#             # Overlapping intervals, merge them
+#             merged[-1][1] = max(merged[-1][1], end)
+    
+#     return merged
+
 def min_boats_needed(intervals):
     """
     Find minimum number of boats needed using sweep line algorithm.
@@ -1372,39 +1386,342 @@ def merge_intervals(intervals):
     return merged
 
 @main_bp.route('/sailing-club', methods=['POST'])
-def sailing_club():
-    data = request.get_json()
-    
-    logging.info("data sent for evaluation {}".format(data))
-    
-    test_cases = data['testCases']
-    solutions = []
-    
-    for test_case in test_cases:
-        test_id = test_case['id']
-        bookings = test_case['input']
+def sailing_club_submission():
+    try:
+        data = request.get_json()
+        
+        test_cases = data['testCases']
+        solutions = []
+        
+        for test_case in test_cases:
+            test_id = test_case['id']
+            bookings = test_case['input']
 
-        if test_id is None:
-            continue
+            if test_id is None:
+                continue
+                
+            # Part 1: Merge overlapping intervals
+            sorted_merged_slots = merge_intervals(bookings)
             
-        # Part 1: Merge overlapping intervals
-        sorted_merged_slots = merge_intervals(bookings)
+            # Part 2: Find minimum boats needed
+            min_boats = min_boats_needed(bookings)
+            
+            solution = {
+                "id": test_id,
+                "sortedMergedSlots": sorted_merged_slots,
+                "minBoatsNeeded": min_boats
+            }
+            solutions.append(solution)
         
-        # Part 2: Find minimum boats needed
-        min_boats = min_boats_needed(bookings)
+        return jsonify({"solutions": solutions})
+    
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error in sailing_club_submission: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+#######################################---DUOLINGO---#############################################
+def roman_to_int(s):
+    roman_map = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+    total = 0
+    prev_value = 0
+    
+    for char in reversed(s):
+        value = roman_map[char]
+        if value < prev_value:
+            total -= value
+        else:
+            total += value
+        prev_value = value
+    
+    return total
+
+# English word to number conversion (improved)
+def english_to_int(s):
+    word_to_num = {
+        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+        'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+        'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
+        'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60,
+        'seventy': 70, 'eighty': 80, 'ninety': 90,
+        'hundred': 100, 'thousand': 1000, 'million': 1000000
+    }
+    
+    words = s.lower().replace('-', ' ').split()
+    total = 0
+    current = 0
+    
+    for word in words:
+        if word in word_to_num:
+            value = word_to_num[word]
+            if value == 100:
+                if current == 0:
+                    current = 1
+                current *= value
+            elif value >= 1000:
+                total += current * value
+                current = 0
+            else:
+                current += value
+    
+    return total + current
+
+# # German word to number conversion (completely rewritten)
+# def german_to_int(s):
+#     word_to_num = {
+#         'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
+#         'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
+#         'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
+#         'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
+#         'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
+#         'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
+#         'hundert': 100, 'tausend': 1000
+#     }
+    
+#     # Handle German compound words like "siebenundachtzig"
+#     s = s.lower().replace('und', ' ').replace('-', ' ')
+#     words = s.split()
+    
+#     total = 0
+#     current = 0
+    
+#     for word in words:
+#         if word in word_to_num:
+#             value = word_to_num[word]
+#             if value == 100:
+#                 if current == 0:
+#                     current = 1
+#                 current *= value
+#             elif value == 1000:
+#                 if current == 0:
+#                     current = 1
+#                 total += current * value
+#                 current = 0
+#             else:
+#                 current += value
+    
+#     return total + current
+
+# # Chinese character to number conversion (completely rewritten)
+# def chinese_to_int(s):
+#     char_to_num = {
+#         '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+#         '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+#         '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
+#     }
+    
+#     # Handle both traditional and simplified
+#     s = s.replace('萬', '万')  # Convert traditional to simplified for processing
+    
+#     total = 0
+#     current = 0
+#     stack = []
+    
+#     for char in s:
+#         if char in char_to_num:
+#             value = char_to_num[char]
+            
+#             if value < 10:  # Digit
+#                 current = current * 10 + value
+#             else:  # Multiplier
+#                 if current == 0:
+#                     current = 1
+#                 current *= value
+                
+#                 # Handle large multipliers (万, 亿)
+#                 if value >= 10000:
+#                     total += current
+#                     current = 0
+#                 else:
+#                     stack.append(current)
+#                     current = 0
+    
+#     # Add remaining values
+#     for val in stack:
+#         total += val
+#     total += current
+    
+#     return total
+
+# Detect language and convert to integer with correct priorities
+def detect_language_and_convert(s):
+    # Check if it's a Roman numeral
+    if re.match(r'^[IVXLCDM]+$', s.upper()):
+        return roman_to_int(s.upper()), 0  # priority 0 for Roman
+    
+    # Check if it's an Arabic numeral
+    if re.match(r'^\d+$', s):
+        return int(s), 5  # priority 5 for Arabic
+    
+    # Check if it's English
+    english_words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 
+                    'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+                    'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+                    'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety',
+                    'hundred', 'thousand', 'million']
+    
+    if any(word in s.lower() for word in english_words):
+        return english_to_int(s), 1  # priority 1 for English
+    
+    # Check if it's German
+    german_words = ['null', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben',
+                   'acht', 'neun', 'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn',
+                   'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn', 'zwanzig',
+                   'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig',
+                   'neunzig', 'hundert', 'tausend', 'und']
+    
+    if any(word in s.lower() for word in german_words):
+        return german_to_int(s), 4  # priority 4 for German
+    
+    # Check if it's Chinese
+    chinese_chars = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+                    '百', '千', '万', '億', '亿', '萬']
+    
+    if any(char in s for char in chinese_chars):
+        # Distinguish between traditional and simplified
+        if any(char in s for char in ['萬', '億']):
+            return chinese_to_int(s), 2  # priority 2 for Traditional Chinese
+        else:
+            return chinese_to_int(s), 3  # priority 3 for Simplified Chinese
+    
+    # Default case
+    try:
+        return int(s), 5
+    except:
+        return 0, 5
+
+@main_bp.route('/duolingo-sort', methods=['POST'])
+def duolingo_sort():
+    print(test_parsers())
+    try:
+        data = request.get_json()
+        part = data.get('part', '')
+        unsorted_list = data.get('challengeInput', {}).get('unsortedList', [])
         
-        solution = {
-            "id": test_id,
-            "sortedMergedSlots": sorted_merged_slots,
-            "minBoatsNeeded": min_boats
-        }
-        solutions.append(solution)
+        if part == 'ONE':
+            # Part 1: Only Roman and Arabic numerals
+            converted = []
+            for item in unsorted_list:
+                if re.match(r'^[IVXLCDM]+$', item.upper()):
+                    converted.append((roman_to_int(item.upper()), item))
+                else:
+                    converted.append((int(item), item))
+            
+            converted.sort(key=lambda x: x[0])
+            sorted_list = [str(x[0]) for x in converted]
+            
+        elif part == 'TWO':
+            # Part 2: Multiple languages
+            converted = []
+            for item in unsorted_list:
+                value, priority = detect_language_and_convert(item)
+                converted.append((value, priority, item))
+            
+            # Sort by value first, then by language priority
+            converted.sort(key=lambda x: (x[0], x[1]))
+            sorted_list = [x[2] for x in converted]
+            
+        else:
+            return jsonify({'error': 'Invalid part specified'}), 400
+        
+        return jsonify({'sortedList': sorted_list})
     
-    result = {"solutions": solutions}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def german_to_int(s):
+    word_to_num = {
+        'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
+        'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
+        'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
+        'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
+        'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
+        'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
+        'hundert': 100, 'tausend': 1000
+    }
     
-    logging.info("sailing club result: %s", result)
-    return json.dumps(result)
+    # Handle German compound words properly
+    s = s.lower().replace('und', ' ').replace('-', ' ')
+    words = s.split()
     
+    total = 0
+    current = 0
+    
+    for word in words:
+        if word in word_to_num:
+            value = word_to_num[word]
+            
+            # Handle multipliers
+            if value == 100:
+                if current == 0:
+                    current = 1
+                current *= value
+            elif value == 1000:
+                if current == 0:
+                    current = 1
+                total += current * value
+                current = 0
+            else:
+                # For German numbers like "dreihundertelf" (drei + hundert + elf)
+                # We need to add the current value
+                current += value
+    
+    return total + current
+
+def chinese_to_int(s):
+    char_to_num = {
+        '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+        '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
+    }
+    
+    # Handle traditional Chinese characters
+    s = s.replace('萬', '万').replace('億', '亿')
+    
+    total = 0
+    current = 0
+    prev_multiplier = 1
+    
+    for char in s:
+        if char in char_to_num:
+            value = char_to_num[char]
+            
+            if value < 10:  # Digit (0-9)
+                current = value
+            elif value < 10000:  # Multiplier (十, 百, 千)
+                if current == 0:
+                    current = 1
+                total += current * value
+                current = 0
+                prev_multiplier = value
+            else:  # Large multiplier (万, 亿)
+                if current == 0:
+                    current = 1
+                total = (total + current) * value
+                current = 0
+    
+    return total + current
+
+# Test the specific cases
+def test_parsers():
+    test_cases = [
+        "四十五",  # Should be 45
+        "XLIX",    # Should be 49
+        "siebenundachtzig",  # Should be 87
+        "one hundred twenty",  # Should be 120
+        "dreihundertelf",  # Should be 311
+        "one thousand one hundred",  # Should be 1100
+        "MCMXCIX",  # Should be 1999
+        "五萬四千三百二十一",  # Should be 54321
+        "100000"    # Should be 100000
+    ]
+    
+    for case in test_cases:
+        value, priority = detect_language_and_convert(case)
+        print(f"{case} -> {value} (priority {priority})")
+
 #######################################---mages-gambit---#############################################
 def solve_mages_gambit(intel, reserve, fronts, stamina):
     """
@@ -1553,45 +1870,8 @@ def trading_bot():
     output = [{'id': event['id'], 'decision': event['decision']} for event in selected_events]
     return jsonify(output)
 
-
-#######################################---2048---#############################################
-@main_bp.route('/2048', methods=['POST', 'OPTIONS'])
-def handle_2048():
-    try:
-        # Handle CORS preflight
-        if request.method == 'OPTIONS':
-            response = jsonify({"status": "ok"})
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-            response.headers.add('Access-Control-Allow-Methods', 'POST')
-            return response
-        
-        # Parse JSON
-        try:
-            data = json.loads(request.data)
-        except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON"}), 400
-        
-        grid = data.get('grid')
-        direction = data.get('mergeDirection')
-        
-        if not grid or not direction:
-            return jsonify({"error": "Missing grid or direction"}), 400
-        
-        # Process the move
-        next_grid, end_game = process_2048_move(grid, direction)
-        
-        response = jsonify({
-            "nextGrid": next_grid,
-            "endGame": end_game
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 #######################################---The Ink Archive---#############################################
+
 @main_bp.route('/The-Ink-Archive', methods=['POST'])
 def the_ink_archive():
     """
@@ -1615,8 +1895,14 @@ def the_ink_archive():
             # For product > 1, we need sum of logs > 0
             # For maximum product, we need maximum sum of logs
             graph = build_log_graph(ratios, n)
-            cycle_path = find_maximum_cycle(graph, n, goods)
-
+            
+            if i == 0:
+                # First challenge: find cycle with product > 1 (maximum positive cycle)
+                cycle_path = find_maximum_positive_cycle(graph, n, goods)
+            else:
+                # Second challenge: find cycle with maximum product
+                cycle_path = find_maximum_cycle(graph, n, goods)
+            
             if cycle_path:
                 # Calculate the actual gain
                 gain = calculate_gain(cycle_path, ratios, goods)
@@ -1653,6 +1939,65 @@ def build_log_graph(ratios, n):
     return graph
 
 
+def find_positive_cycle(graph, n, goods):
+    """
+    Find a cycle with positive sum of logarithmic weights (product > 1).
+    Uses a modified Bellman-Ford algorithm to detect positive cycles.
+    """
+    # We want to find positive cycles, so we negate all weights
+    # and look for negative cycles in the negated graph
+    negated_graph = defaultdict(list)
+    for node in graph:
+        for neighbor, log_weight, rate in graph[node]:
+            negated_graph[node].append((neighbor, -log_weight, rate))
+    
+    # Try to find a negative cycle in the negated graph
+    cycle = bellman_ford_negative_cycle(negated_graph, n)
+    
+    if cycle:
+        # Convert node indices to good names
+        return [goods[node] for node in cycle]
+    
+    return None
+
+
+def find_maximum_positive_cycle(graph, n, goods):
+    """
+    Find the cycle with positive sum of logarithmic weights (product > 1) and smallest size.
+    Prioritizes smaller cycles when multiple positive cycles exist.
+    For small graphs (like first challenge with 4 vertices), focuses on cycles of length 3-4.
+    """
+    best_cycle = None
+    best_sum = 0  # Only consider cycles with sum > 0 (product > 1)
+    best_cycle_length = float('inf')
+    
+    # For small graphs (first challenge), focus on cycles of length 3-4
+    # For larger graphs, search more broadly
+    min_cycle_length = 3
+    max_cycle_length = min(n, 8) if n > 10 else n
+    
+    # Try all possible cycles using DFS with cycle detection
+    # Start with smaller cycle lengths first (3, then 4, etc.)
+    for cycle_length in range(min_cycle_length, max_cycle_length + 1):
+        for start in range(n):
+            if start in graph:
+                cycle, cycle_sum = find_best_cycle_from_node_with_length(graph, start, n, cycle_length)
+                if cycle and cycle_sum > 0:  # Must be positive
+                    if len(cycle) - 1 < best_cycle_length or (len(cycle) - 1 == best_cycle_length and cycle_sum > best_sum):
+                        best_sum = cycle_sum
+                        best_cycle = cycle
+                        best_cycle_length = len(cycle) - 1
+                        
+        # If we found a positive cycle at this length, prefer it over longer cycles
+        if best_cycle:
+            break
+    
+    if best_cycle:
+        return [goods[node] for node in best_cycle]
+    
+    return None
+
+
 def find_maximum_cycle(graph, n, goods):
     """
     Find a cycle with maximum sum of logarithmic weights (maximum product).
@@ -1673,6 +2018,74 @@ def find_maximum_cycle(graph, n, goods):
         return [goods[node] for node in best_cycle]
     
     return None
+
+
+def bellman_ford_negative_cycle(graph, n):
+    """
+    Modified Bellman-Ford to detect negative cycles.
+    Returns a cycle if found, None otherwise.
+    """
+    # Distance array
+    dist = [float('inf')] * n
+    predecessor = [-1] * n
+    
+    # Initialize distances from source 0
+    if 0 in graph:
+        dist[0] = 0
+    
+    # Relax edges n-1 times
+    for _ in range(n - 1):
+        updated = False
+        for node in graph:
+            if dist[node] != float('inf'):
+                for neighbor, weight, _ in graph[node]:
+                    if dist[node] + weight < dist[neighbor]:
+                        dist[neighbor] = dist[node] + weight
+                        predecessor[neighbor] = node
+                        updated = True
+        if not updated:
+            break
+    
+    # Check for negative cycles
+    for node in graph:
+        if dist[node] != float('inf'):
+            for neighbor, weight, _ in graph[node]:
+                if dist[node] + weight < dist[neighbor]:
+                    # Found a negative cycle, extract it
+                    return extract_cycle(predecessor, neighbor, n)
+    
+    return None
+
+
+def extract_cycle(predecessor, start, n):
+    """
+    Extract cycle from predecessor array starting from a node in the cycle.
+    """
+    # Find a node that's definitely in the cycle
+    current = start
+    for _ in range(n):
+        current = predecessor[current]
+        if current == -1:
+            return None
+    
+    # Now current is definitely in a cycle
+    cycle = []
+    visited = set()
+    
+    while current not in visited:
+        visited.add(current)
+        cycle.append(current)
+        current = predecessor[current]
+        if current == -1:
+            return None
+    
+    # Find where the cycle starts
+    cycle_start = current
+    final_cycle = []
+    idx = cycle.index(cycle_start)
+    final_cycle = cycle[idx:] + [cycle_start]  # Add the starting node at the end to complete the cycle
+    
+    return final_cycle
 
 
 def find_best_cycle_from_node(graph, start, n, max_depth=10):
@@ -1706,6 +2119,42 @@ def find_best_cycle_from_node(graph, start, n, max_depth=10):
     dfs(start, [start], 0, visited)
     
     return best_cycle, best_sum
+
+
+def find_best_cycle_from_node_with_length(graph, start, n, target_length):
+    """
+    Find the best cycle starting from a given node with a specific length using DFS.
+    """
+    best_cycle = None
+    best_sum = float('-inf')
+    
+    def dfs(current, path, path_sum, visited, remaining_steps):
+        nonlocal best_cycle, best_sum
+        
+        if remaining_steps == 0:
+            # Check if we can return to start
+            if current in graph:
+                for neighbor, log_weight, _ in graph[current]:
+                    if neighbor == start:
+                        cycle_sum = path_sum + log_weight
+                        if cycle_sum > best_sum:
+                            best_sum = cycle_sum
+                            best_cycle = path + [start]
+            return
+        
+        if current in graph:
+            for neighbor, log_weight, _ in graph[current]:
+                if neighbor not in visited and neighbor != start:
+                    # Continue DFS
+                    visited.add(neighbor)
+                    dfs(neighbor, path + [neighbor], path_sum + log_weight, visited, remaining_steps - 1)
+                    visited.remove(neighbor)
+    
+    visited = {start}
+    dfs(start, [start], 0, visited, target_length - 1)
+    
+    return best_cycle, best_sum
+
 
 def calculate_gain(cycle_path, ratios, goods):
     """
