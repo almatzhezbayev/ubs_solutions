@@ -18,6 +18,7 @@ import random
 from copy import deepcopy
 import json
 from app.grids_2048 import process_2048_move
+import logging
 
 from app.duolingo import detect_language_and_convert, roman_to_int
 
@@ -1372,36 +1373,37 @@ def merge_intervals(intervals):
 
 @main_bp.route('/sailing-club/submission', methods=['POST'])
 def sailing_club_submission():
-    try:
-        data = request.get_json()
-        
-        test_cases = data['testCases']
-        solutions = []
-        
-        for test_case in test_cases:
-            test_id = test_case['id']
-            bookings = test_case['input']
+    data = request.get_json()
+    
+    logging.info("data sent for evaluation {}".format(data))
+    
+    test_cases = data['testCases']
+    solutions = []
+    
+    for test_case in test_cases:
+        test_id = test_case['id']
+        bookings = test_case['input']
 
-            if test_id is None:
-                continue
-                
-            # Part 1: Merge overlapping intervals
-            sorted_merged_slots = merge_intervals(bookings)
+        if test_id is None:
+            continue
             
-            # Part 2: Find minimum boats needed
-            min_boats = min_boats_needed(bookings)
-            
-            solution = {
-                "id": test_id,
-                "sortedMergedSlots": sorted_merged_slots,
-                "minBoatsNeeded": min_boats
-            }
-            solutions.append(solution)
+        # Part 1: Merge overlapping intervals
+        sorted_merged_slots = merge_intervals(bookings)
         
-        return jsonify({"solutions": solutions})
-    except Exception as e:
-        print('here')
-        return jsonify({"error here": str(e)}), 404
+        # Part 2: Find minimum boats needed
+        min_boats = min_boats_needed(bookings)
+        
+        solution = {
+            "id": test_id,
+            "sortedMergedSlots": sorted_merged_slots,
+            "minBoatsNeeded": min_boats
+        }
+        solutions.append(solution)
+    
+    result = {"solutions": solutions}
+    
+    logging.info("sailing club result: %s", result)
+    return json.dumps(result)
     
 #######################################---mages-gambit---#############################################
 def solve_mages_gambit(intel, reserve, fronts, stamina):
