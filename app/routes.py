@@ -3,6 +3,7 @@ import heapq
 from flask import Blueprint, jsonify, request
 from datetime import datetime
 import numpy as np
+import pandas as pd
 from scipy.interpolate import UnivariateSpline
 import math
 
@@ -75,6 +76,73 @@ def ticketing_agent():
 
     return jsonify(result)
 
+# @main_bp.route('/blankety', methods=['POST'])
+# def blankety():
+#     data = request.get_json()
+#     series_list = data['series']
+#     result = []
+    
+#     for series in series_list:
+#         n = len(series)
+#         indices = np.arange(n)
+#         # Extract known points
+#         known_indices = []
+#         known_values = []
+#         for i, val in enumerate(series):
+#             if val is not None:
+#                 known_indices.append(i)
+#                 known_values.append(val)
+        
+#         known_indices = np.array(known_indices)
+#         known_values = np.array(known_values)
+        
+#         # If there are no known points, we cannot impute - but should not happen?
+#         if len(known_indices) == 0:
+#             # All null? Then fill with zeros? But should not happen.
+#             imputed_series = [0.0] * n
+#         elif len(known_indices) == 1:
+#             # Only one point, fill constant
+#             imputed_series = [known_values[0]] * n
+#         else:
+#             # Check if we have enough points for cubic spline
+#             if len(known_indices) < 4:
+#                 # Use linear interpolation
+#                 # Create a linear spline with s=0?
+#                 spline = UnivariateSpline(known_indices, known_values, k=1, s=0)
+#             else:
+#                 # Use cubic spline with smoothing
+#                 # Choose s: let's use 0.5 * number of points
+#                 s_val = 0.5 * len(known_indices)
+#                 spline = UnivariateSpline(known_indices, known_values, k=3, s=s_val)
+#             # Predict all indices
+#             predicted = spline(indices)
+#             # Create the completed series
+#             imputed_series = []
+#             for i, val in enumerate(series):
+#                 if val is None:
+#                     imputed_series.append(float(predicted[i]))
+#                 else:
+#                     imputed_series.append(val)
+#         result.append(imputed_series)
+    
+#     return jsonify({'answer': result})
+
+def simple_impute(series):
+    """Simple but robust imputation using pandas interpolation"""
+    # Convert to pandas Series
+    ts = pd.Series(series)
+    
+    # Use linear interpolation with limit to handle edge cases
+    imputed = ts.interpolate(method='linear', limit_direction='both')
+    
+    # Fill any remaining NaNs with forward/backward fill or median
+    if imputed.isna().any():
+        imputed = imputed.fillna(method='ffill').fillna(method='bfill')
+        if imputed.isna().any():
+            imputed = imputed.fillna(imputed.median())
+    
+    return imputed.tolist()
+
 @main_bp.route('/blankety', methods=['POST'])
 def blankety():
     data = request.get_json()
@@ -82,46 +150,7 @@ def blankety():
     result = []
     
     for series in series_list:
-        n = len(series)
-        indices = np.arange(n)
-        # Extract known points
-        known_indices = []
-        known_values = []
-        for i, val in enumerate(series):
-            if val is not None:
-                known_indices.append(i)
-                known_values.append(val)
-        
-        known_indices = np.array(known_indices)
-        known_values = np.array(known_values)
-        
-        # If there are no known points, we cannot impute - but should not happen?
-        if len(known_indices) == 0:
-            # All null? Then fill with zeros? But should not happen.
-            imputed_series = [0.0] * n
-        elif len(known_indices) == 1:
-            # Only one point, fill constant
-            imputed_series = [known_values[0]] * n
-        else:
-            # Check if we have enough points for cubic spline
-            if len(known_indices) < 4:
-                # Use linear interpolation
-                # Create a linear spline with s=0?
-                spline = UnivariateSpline(known_indices, known_values, k=1, s=0)
-            else:
-                # Use cubic spline with smoothing
-                # Choose s: let's use 0.5 * number of points
-                s_val = 0.5 * len(known_indices)
-                spline = UnivariateSpline(known_indices, known_values, k=3, s=s_val)
-            # Predict all indices
-            predicted = spline(indices)
-            # Create the completed series
-            imputed_series = []
-            for i, val in enumerate(series):
-                if val is None:
-                    imputed_series.append(float(predicted[i]))
-                else:
-                    imputed_series.append(val)
+        imputed_series = simple_impute(series)
         result.append(imputed_series)
     
     return jsonify({'answer': result})
