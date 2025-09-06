@@ -21,7 +21,7 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/')
 def home():
     return jsonify({
-        'message': 'Welcome to Flask Backend!',
+        'message': 'Welcome to Flask Backend! 123 ubs',
         'status': 'success',
         'timestamp': datetime.now().isoformat()
     })
