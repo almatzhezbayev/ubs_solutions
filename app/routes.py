@@ -494,97 +494,93 @@ def chase_the_flag_main():
     return jsonify(flags)
 
 #######################################---investigate---#############################################
-def find_cycle_in_network(edges):
+def find_extra_connections(edges):
     """
-    Find the unique cycle in a graph that has exactly one cycle.
-    Uses DFS to detect the cycle and returns all edges in the cycle.
+    Find extra connections in a network that has exactly one cycle.
+    Uses Union-Find (Disjoint Set Union) to detect cycles and find redundant edges.
     """
-    # Build adjacency list
-    graph = defaultdict(list)
-    edge_set = set()
-    
-    for edge in edges:
-        spy1, spy2 = edge["spy1"], edge["spy2"]
-        graph[spy1].append(spy2)
-        graph[spy2].append(spy1)
-        # Store edges in a consistent format (smaller node first)
-        edge_tuple = tuple(sorted([spy1, spy2]))
-        edge_set.add(edge_tuple)
-    
-    # DFS to find cycle
-    visited = set()
+    # Build graph and prepare for union-find
     parent = {}
-    cycle_edges = []
+    rank = {}
     
-    def dfs(node, par):
-        visited.add(node)
-        parent[node] = par
-        
-        for neighbor in graph[node]:
-            if neighbor == par:  # Skip the edge we came from
-                continue
-                
-            if neighbor in visited:
-                # Found back edge - this creates the cycle
-                # Trace back from current node to neighbor to find cycle
-                cycle_nodes = []
-                current = node
-                while current != neighbor:
-                    cycle_nodes.append(current)
-                    current = parent[current]
-                cycle_nodes.append(neighbor)
-                
-                # Convert nodes to edges
-                for i in range(len(cycle_nodes)):
-                    node1 = cycle_nodes[i]
-                    node2 = cycle_nodes[(i + 1) % len(cycle_nodes)]
-                    edge_tuple = tuple(sorted([node1, node2]))
-                    if edge_tuple in edge_set:
-                        cycle_edges.append({
-                            "spy1": edge_tuple[0],
-                            "spy2": edge_tuple[1]
-                        })
-                
-                return True
-            else:
-                if dfs(neighbor, node):
-                    return True
-        
+    def find(x):
+        if parent[x] != x:
+            parent[x] = find(parent[x])
+        return parent[x]
+    
+    def union(x, y):
+        rx = find(x)
+        ry = find(y)
+        if rx == ry:
+            return True  # Cycle detected
+        if rank[rx] < rank[ry]:
+            parent[rx] = ry
+        elif rank[rx] > rank[ry]:
+            parent[ry] = rx
+        else:
+            parent[ry] = rx
+            rank[rx] += 1
         return False
     
-    # Start DFS from any node
-    if graph:
-        start_node = next(iter(graph.keys()))
-        dfs(start_node, None)
+    # Initialize union-find data structure
+    nodes = set()
+    for edge in edges:
+        nodes.add(edge["spy1"])
+        nodes.add(edge["spy2"])
     
-    return cycle_edges
+    for node in nodes:
+        parent[node] = node
+        rank[node] = 0
+    
+    # Find redundant edges (edges that create cycles)
+    redundant_edges = []
+    for edge in edges:
+        spy1, spy2 = edge["spy1"], edge["spy2"]
+        if union(spy1, spy2):
+            redundant_edges.append(edge)
+    
+    return redundant_edges
 
 @main_bp.route('/investigate', methods=['POST'])
 def investigate():
     """
-    Detect cycles in spy networks. Each network has exactly one cycle.
-    Returns all edges that form the cycle in each network.
+    Detect extra connections in spy networks that create cycles.
     """
-    data = request.get_json()
-    networks = data.get('networks', [])
-    
-    result_networks = []
-    
-    for network_data in networks:
-        network_id = network_data['networkId']
-        edges = network_data['network']
+    try:
+        data = request.get_json()
         
-        # Find the cycle in this network
-        cycle_edges = find_cycle_in_network(edges)
+        # Handle the input format: it's an array of networks
+        if isinstance(data, list):
+            networks = data
+        else:
+            # Fallback: try to get networks from 'networks' key
+            networks = data.get('networks', [])
         
-        result_networks.append({
-            "networkId": network_id,
-            "extraChannels": cycle_edges
+        result_networks = []
+        
+        for network_data in networks:
+            network_id = network_data.get('networkId')
+            edges = network_data.get('network', [])
+            
+            # Find the extra connections in this network
+            extra_connections = find_extra_connections(edges)
+            
+            result_networks.append({
+                "networkId": network_id,
+                "extraChannels": extra_connections
+            })
+        
+        return jsonify({
+            "networks": result_networks
         })
     
-    return jsonify({
-        "networks": result_networks
-    })
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error processing request: {str(e)}")
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e)
+        }), 500
 #######################################---SAFEGUARD---#############################################
 def mirror_words(x: str) -> str:
     """Reverse each word in the sentence"""
@@ -1588,3 +1584,79 @@ def duolingo_sort():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+#######################################---mages-gambit---#############################################
+def solve_mages_gambit(intel, reserve, fronts, stamina):
+    """
+    Solve the mage's gambit problem using dynamic programming.
+    Klein needs to attack undeads in sequence, managing mana and stamina optimally.
+    """
+    if not intel:
+        return 10  # Still need one cooldown at the end
+    
+    n = len(intel)
+    
+    # Memoization: dp[i][mana][stamina][last_front] = min_time
+    from functools import lru_cache
+    
+    @lru_cache(maxsize=None)
+    def dp(pos, current_mana, current_stamina, last_front):
+        # Base case: all attacks completed
+        if pos == n:
+            return 10  # Final cooldown required
+        
+        front, mana_cost = intel[pos]
+        min_time = float('inf')
+        
+        # Option 1: Attack immediately if we have enough mana and stamina
+        if current_mana >= mana_cost and current_stamina > 0:
+            new_mana = current_mana - mana_cost
+            new_stamina = current_stamina - 1
+            
+            # Time cost: 10 if new front or first attack, 0 if same front consecutive
+            time_cost = 10 if last_front != front else 0
+            
+            remaining_time = dp(pos + 1, new_mana, new_stamina, front)
+            min_time = min(min_time, time_cost + remaining_time)
+        
+        # Option 2: Cooldown first, then attack
+        # After cooldown: mana = reserve, stamina = stamina
+        if reserve >= mana_cost:  # Make sure we can attack after cooldown
+            new_mana = reserve - mana_cost
+            new_stamina = stamina - 1
+            
+            # Cooldown takes 10 minutes, attack takes 10 minutes (new targeting after cooldown)
+            cooldown_time = 10
+            attack_time = 10
+            
+            remaining_time = dp(pos + 1, new_mana, new_stamina, front)
+            min_time = min(min_time, cooldown_time + attack_time + remaining_time)
+        
+        return min_time
+    
+    # Start with full mana and stamina, no previous front
+    return dp(0, reserve, stamina, None)
+
+@main_bp.route('/the-mages-gambit', methods=['POST'])
+def the_mages_gambit():
+    """
+    Solve Klein's undead attack scheduling problem.
+    Klein must attack undeads in sequence while managing mana and stamina.
+    """
+    data = request.get_json()
+    
+    results = []
+    
+    for scenario in data:
+        intel = scenario['intel']
+        reserve = scenario['reserve']
+        fronts = scenario['fronts']
+        stamina = scenario['stamina']
+        
+        time_needed = solve_mages_gambit(intel, reserve, fronts, stamina)
+        
+        results.append({
+            "time": time_needed
+        })
+    
+    return jsonify(results)
