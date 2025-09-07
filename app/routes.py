@@ -1,4 +1,5 @@
 import binascii
+import heapq
 from collections import defaultdict
 import heapq
 import logging
@@ -129,154 +130,148 @@ def blankety():
     return jsonify({'answer': result})
 
 #########################################---PRINCESS---###########################################
-def dijkstra(graph, start, n_stations):
-    dist = [float('inf')] * n_stations
+def dijkstra(graph, start, n):
+    dist = [float('inf')] * n
     dist[start] = 0
-    pq = [(0, start)]
-    
-    while pq:
-        d, u = heapq.heappop(pq)
-        if d > dist[u]:
+    heap = [(0, start)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d != dist[u]:
             continue
-        
-        for v, weight in graph[u]:
-            if dist[u] + weight < dist[v]:
-                dist[v] = dist[u] + weight
-                heapq.heappush(pq, (dist[v], v))
-    
+        for v, w in graph[u]:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                heapq.heappush(heap, (dist[v], v))
     return dist
 
 def solve_subway_scheduling(edges, tasks, s0):
     if not tasks:
         return 0, 0, []
     
-    # Build adjacency list for the graph
-    stations = set([s0])
+    stations = set()
+    stations.add(s0)
+    for task in tasks:
+        stations.add(task[2])
     for s1, s2, c in edges:
         stations.add(s1)
         stations.add(s2)
     
-    for task in tasks:
-        stations.add(task[2])  # Add task stations
-    
-    station_list = sorted(list(stations))
-    station_to_idx = {station: i for i, station in enumerate(station_list)}
+    station_list = sorted(stations)
     n_stations = len(station_list)
+    station_to_idx = {s: i for i, s in enumerate(station_list)}
     
-    # Build graph
-    graph = defaultdict(list)
+    graph = [[] for _ in range(n_stations)]
     for s1, s2, c in edges:
-        idx1, idx2 = station_to_idx[s1], station_to_idx[s2]
-        graph[idx1].append((idx2, c))
-        graph[idx2].append((idx1, c))
+        u = station_to_idx[s1]
+        v = station_to_idx[s2]
+        graph[u].append((v, c))
+        graph[v].append((u, c))
     
-    # Only compute distances from task stations and starting station
-    distance_cache = {}
+    relevant_stations = set([s0] + [task[2] for task in tasks])
+    relevant_indices = [station_to_idx[s] for s in relevant_stations]
+    dist_map = {}
+    for station in relevant_stations:
+        idx = station_to_idx[station]
+        dists = dijkstra(graph, idx, n_stations)
+        dist_map[station] = {s: dists[station_to_idx[s]] for s in relevant_stations}
     
-    def get_distance(from_station, to_station):
-        key = (from_station, to_station)
-        if key not in distance_cache:
-            from_idx = station_to_idx[from_station]
-            distances = dijkstra(graph, from_idx, n_stations)
-            to_idx = station_to_idx[to_station]
-            distance_cache[key] = distances[to_idx]
-        return distance_cache[key]
+    def get_distance(u, v):
+        return dist_map[u][v]
     
-    # Sort tasks by end time
-    indexed_tasks = [(tasks[i][0], tasks[i][1], tasks[i][2], tasks[i][3], i) 
-                     for i in range(len(tasks))]
-    indexed_tasks.sort(key=lambda x: x[1])
+    tasks_with_idx = [(start, end, station, reward, i) 
+                      for i, (start, end, station, reward) in enumerate(tasks)]
+    tasks_with_idx.sort(key=lambda x: x[1])
+    n = len(tasks_with_idx)
     
-    n = len(indexed_tasks)
-    
-    # dp[i] = (max_reward, min_fee, prev_task_index)
-    dp = [None] * n
+    dp = [(-1, float('inf'), -1, -1)] * n
+    best_up_to = [None] * n
     
     for i in range(n):
-        start_time, end_time, station, reward, orig_idx = indexed_tasks[i]
+        start_i, end_i, station_i, reward_i, orig_i = tasks_with_idx[i]
+        best_reward = -1
+        best_fee = float('inf')
+        best_prev = -1
+        best_station = None
         
-        # Option 1: Take this task as the first task (from starting station)
-        transport_cost = get_distance(s0, station)
-        if transport_cost != float('inf'):
-            dp[i] = (reward, transport_cost, -1)
+        cost_from_start = get_distance(s0, station_i)
+        if cost_from_start != float('inf'):
+            best_reward = reward_i
+            best_fee = cost_from_start
+            best_prev = -1
+            best_station = station_i
         
-        # Option 2: Take this task after some previous compatible task
-        # Use binary search to find the latest compatible task
-        left, right = 0, i - 1
-        latest_compatible = -1
-        
+        left, right = 0, i-1
+        j_index = -1
         while left <= right:
             mid = (left + right) // 2
-            if indexed_tasks[mid][1] <= start_time:  # prev_end <= start_time
-                latest_compatible = mid
+            if tasks_with_idx[mid][1] <= start_i:
+                j_index = mid
                 left = mid + 1
             else:
                 right = mid - 1
         
-        # Check all compatible tasks starting from the latest one
-        for j in range(latest_compatible, -1, -1):
-            if dp[j] is None:
-                continue
-                
-            prev_start, prev_end, prev_station, prev_reward, prev_orig_idx = indexed_tasks[j]
-            prev_total_reward, prev_total_fee, _ = dp[j]
-            
-            # Early termination: if current best is already better, no need to check earlier tasks
-            if dp[i] is not None and prev_total_reward + reward < dp[i][0]:
-                break
-                
-            transport_cost = get_distance(prev_station, station)
-            
-            if transport_cost != float('inf'):
-                new_reward = prev_total_reward + reward
-                new_fee = prev_total_fee + transport_cost
-                
-                # Check if this is better than current best for task i
-                if (dp[i] is None or new_reward > dp[i][0] or 
-                    (new_reward == dp[i][0] and new_fee < dp[i][1])):
-                    dp[i] = (new_reward, new_fee, j)
+        if j_index != -1:
+            best_j = best_up_to[j_index]
+            if best_j is not None:
+                reward_j, fee_j, station_j = best_j
+                transport_cost = get_distance(station_j, station_i)
+                if transport_cost != float('inf'):
+                    total_reward = reward_j + reward_i
+                    total_fee = fee_j + transport_cost
+                    if total_reward > best_reward or (total_reward == best_reward and total_fee < best_fee):
+                        best_reward = total_reward
+                        best_fee = total_fee
+                        best_prev = j_index
+                        best_station = station_i
+        
+        if best_reward != -1:
+            dp[i] = (best_reward, best_fee, best_prev, best_station)
+        
+        if i == 0:
+            if dp[0][0] != -1:
+                best_up_to[0] = (dp[0][0], dp[0][1], dp[0][3])
+            else:
+                best_up_to[0] = None
+        else:
+            prev_best = best_up_to[i-1]
+            if dp[i][0] == -1:
+                best_up_to[i] = prev_best
+            else:
+                if prev_best is None:
+                    best_up_to[i] = (dp[i][0], dp[i][1], dp[i][3])
+                else:
+                    if dp[i][0] > prev_best[0] or (dp[i][0] == prev_best[0] and dp[i][1] < prev_best[1]):
+                        best_up_to[i] = (dp[i][0], dp[i][1], dp[i][3])
+                    else:
+                        best_up_to[i] = prev_best
     
-    # Find the task with maximum reward (and minimum fee if tied)
-    max_reward = 0
-    min_fee = float('inf')
-    best_task = -1
-    
+    best_i = -1
+    best_reward = -1
+    best_fee = float('inf')
     for i in range(n):
-        if dp[i] is None:
-            continue
-            
-        reward, fee, _ = dp[i]
-        last_station = indexed_tasks[i][2]
-        
-        # Add return cost to starting station
-        return_cost = get_distance(last_station, s0)
-        total_fee = fee + return_cost
-        
-        if (reward > max_reward or 
-            (reward == max_reward and total_fee < min_fee)):
-            max_reward = reward
-            min_fee = total_fee
-            best_task = i
+        if dp[i][0] > best_reward or (dp[i][0] == best_reward and dp[i][1] < best_fee):
+            best_reward = dp[i][0]
+            best_fee = dp[i][1]
+            best_i = i
     
-    # Reconstruct solution by backtracking
-    selected_tasks = []
-    current = best_task
+    if best_i == -1:
+        return 0, 0, []
     
+    return_cost = get_distance(dp[best_i][3], s0)
+    best_fee += return_cost
+    
+    path = []
+    current = best_i
     while current != -1:
-        if dp[current] is None:
-            break
-        _, _, prev_task = dp[current]
-        selected_tasks.append(indexed_tasks[current][4])  # original index
-        current = prev_task
+        path.append(tasks_with_idx[current][4])
+        current = dp[current][2]
+    path.reverse()
     
-    selected_tasks.reverse()
-    
-    return max_reward, min_fee, selected_tasks
+    return best_reward, best_fee, path
 
 @main_bp.route('/princess-diaries', methods=['POST'])
 def princess_diaries():
     data = request.get_json()
-    
     tasks_data = data['tasks']
     subway_data = data['subway']
     starting_station = data['starting_station']
@@ -294,14 +289,14 @@ def princess_diaries():
     
     edges = []
     for connection in subway_data:
-        [s1, s2] = connection['connection']
+        s1, s2 = connection['connection']
         fee = connection['fee']
         edges.append([s1, s2, fee])
     
     max_reward, min_fee, selected_tasks = solve_subway_scheduling(edges, tasks, starting_station)
     
-    selected_with_start_time = [(i, tasks[i][0]) for i in selected_tasks]  # (index, start_time)
-    selected_with_start_time.sort(key=lambda x: x[1])  # Sort by start time
+    selected_with_start_time = [(i, tasks[i][0]) for i in selected_tasks]
+    selected_with_start_time.sort(key=lambda x: x[1])
     schedule = [task_names[i] for i, _ in selected_with_start_time]
     
     response = {
