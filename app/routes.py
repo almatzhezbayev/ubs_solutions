@@ -465,6 +465,7 @@ def trading_formula():
         if not isinstance(data, list):
             return jsonify({'error': 'Expected JSON array'}), 400
 
+        print("trading data:", data)
         results = []
         
         # Process each test case
