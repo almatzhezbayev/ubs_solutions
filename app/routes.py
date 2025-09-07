@@ -452,15 +452,19 @@ def trading_formula():
     Endpoint to evaluate LaTeX formulas for financial calculations
     """
     try:
-        # Get JSON data from request
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
+        # Get raw request data
+        raw_data = request.data
+        if not raw_data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        try:
+            data = json.loads(raw_data)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid JSON'}), 400
+
         if not isinstance(data, list):
             return jsonify({'error': 'Expected JSON array'}), 400
-        
+
         results = []
         
         # Process each test case
