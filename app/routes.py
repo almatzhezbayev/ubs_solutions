@@ -1399,226 +1399,25 @@ def sailing_club_submission():
         return jsonify({"error": "Internal server error"}), 500
 
 #######################################---DUOLINGO---#############################################
-def roman_to_int(s):
-    roman_map = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
-    total = 0
-    prev_value = 0
-    
-    for char in reversed(s):
-        value = roman_map[char]
-        if value < prev_value:
-            total -= value
-        else:
-            total += value
-        prev_value = value
-    
-    return total
-
-# English word to number conversion (improved)
-def english_to_int(s):
-    word_to_num = {
-        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-        'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-        'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
-        'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60,
-        'seventy': 70, 'eighty': 80, 'ninety': 90,
-        'hundred': 100, 'thousand': 1000, 'million': 1000000
-    }
-    
-    words = s.lower().replace('-', ' ').split()
-    total = 0
-    current = 0
-    
-    for word in words:
-        if word in word_to_num:
-            value = word_to_num[word]
-            if value == 100:
-                if current == 0:
-                    current = 1
-                current *= value
-            elif value >= 1000:
-                total += current * value
-                current = 0
-            else:
-                current += value
-    
-    return total + current
-
-# # German word to number conversion (completely rewritten)
-# def german_to_int(s):
-#     word_to_num = {
-#         'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
-#         'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
-#         'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
-#         'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
-#         'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
-#         'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
-#         'hundert': 100, 'tausend': 1000
-#     }
-    
-#     # Handle German compound words like "siebenundachtzig"
-#     s = s.lower().replace('und', ' ').replace('-', ' ')
-#     words = s.split()
-    
-#     total = 0
-#     current = 0
-    
-#     for word in words:
-#         if word in word_to_num:
-#             value = word_to_num[word]
-#             if value == 100:
-#                 if current == 0:
-#                     current = 1
-#                 current *= value
-#             elif value == 1000:
-#                 if current == 0:
-#                     current = 1
-#                 total += current * value
-#                 current = 0
-#             else:
-#                 current += value
-    
-#     return total + current
-
-# # Chinese character to number conversion (completely rewritten)
-# def chinese_to_int(s):
-#     char_to_num = {
-#         '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-#         '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-#         '百': 100, '千': 1000, '万': 10000, '億': 100000000, '亿': 100000000
-#     }
-    
-#     # Handle both traditional and simplified
-#     s = s.replace('萬', '万')  # Convert traditional to simplified for processing
-    
-#     total = 0
-#     current = 0
-#     stack = []
-    
-#     for char in s:
-#         if char in char_to_num:
-#             value = char_to_num[char]
-            
-#             if value < 10:  # Digit
-#                 current = current * 10 + value
-#             else:  # Multiplier
-#                 if current == 0:
-#                     current = 1
-#                 current *= value
-                
-#                 # Handle large multipliers (万, 亿)
-#                 if value >= 10000:
-#                     total += current
-#                     current = 0
-#                 else:
-#                     stack.append(current)
-#                     current = 0
-    
-#     # Add remaining values
-#     for val in stack:
-#         total += val
-#     total += current
-    
-#     return total
-
-# Detect language and convert to integer with correct priorities
-def detect_language_and_convert(s):
-    # Check if it's a Roman numeral
-    if re.match(r'^[IVXLCDM]+$', s.upper()):
-        return roman_to_int(s.upper()), 0  # priority 0 for Roman
-    
-    # Check if it's an Arabic numeral
-    if re.match(r'^\d+$', s):
-        return int(s), 5  # priority 5 for Arabic
-    
-    # Check if it's English
-    english_words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 
-                    'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
-                    'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
-                    'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety',
-                    'hundred', 'thousand', 'million']
-    
-    if any(word in s.lower() for word in english_words):
-        return english_to_int(s), 1  # priority 1 for English
-    
-    # Check if it's German
-    german_words = ['null', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben',
-                   'acht', 'neun', 'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn',
-                   'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn', 'zwanzig',
-                   'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig',
-                   'neunzig', 'hundert', 'tausend', 'und']
-    
-    if any(word in s.lower() for word in german_words):
-        return german_to_int(s), 4  # priority 4 for German
-    
-    # Check if it's Chinese
-    chinese_chars = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
-                    '百', '千', '万', '億', '亿', '萬']
-    
-    if any(char in s for char in chinese_chars):
-        # Distinguish between traditional and simplified
-        if any(char in s for char in ['萬', '億']):
-            return chinese_to_int(s), 2  # priority 2 for Traditional Chinese
-        else:
-            return chinese_to_int(s), 3  # priority 3 for Simplified Chinese
-    
-    # Default case
-    try:
-        return int(s), 5
-    except:
-        return 0, 5
+from app.duolingo import duolingo_sort as process_duolingo_sort
 
 @main_bp.route('/duolingo-sort', methods=['POST'])
 def duolingo_sort():
-    print(test_parsers())
     try:
         data = request.get_json()
-        part = data.get('part', '')
-        unsorted_list = data.get('challengeInput', {}).get('unsortedList', [])
+        result = process_duolingo_sort(data)
         
-        if part == 'ONE':
-            # Part 1: Only Roman and Arabic numerals
-            converted = []
-            for item in unsorted_list:
-                if re.match(r'^[IVXLCDM]+$', item.upper()):
-                    converted.append((roman_to_int(item.upper()), item))
-                else:
-                    converted.append((int(item), item))
-            
-            converted.sort(key=lambda x: x[0])
-            sorted_list = [str(x[0]) for x in converted]
-            
-        elif part == 'TWO':
-            # Part 2: Multiple languages
-            converted = []
-            for item in unsorted_list:
-                value, priority = detect_language_and_convert(item)
-                converted.append((value, priority, item))
-            
-            # Sort by value first, then by language priority
-            converted.sort(key=lambda x: (x[0], x[1]))
-            sorted_list = [x[2] for x in converted]
-            
+        if isinstance(result, tuple) and len(result) == 2:
+            # Error case
+            return jsonify(result[0]), result[1]
         else:
-            return jsonify({'error': 'Invalid part specified'}), 400
-        
-        return jsonify({'sortedList': sorted_list})
+            # Success case
+            return jsonify(result)
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-def german_to_int(s):
-    word_to_num = {
-        'null': 0, 'eins': 1, 'zwei': 2, 'drei': 3, 'vier': 4, 'fünf': 5,
-        'sechs': 6, 'sieben': 7, 'acht': 8, 'neun': 9, 'zehn': 10,
-        'elf': 11, 'zwölf': 12, 'dreizehn': 13, 'vierzehn': 14, 'fünfzehn': 15,
-        'sechzehn': 16, 'siebzehn': 17, 'achtzehn': 18, 'neunzehn': 19,
-        'zwanzig': 20, 'dreißig': 30, 'vierzig': 40, 'fünfzig': 50, 'sechzig': 60,
-        'siebzig': 70, 'achtzig': 80, 'neunzig': 90,
-        'hundert': 100, 'tausend': 1000
-    }
+#######################################---MAGES_GAMBIT---#############################################
     
     # Handle German compound words properly
     s = s.lower().replace('und', ' ').replace('-', ' ')
@@ -1696,11 +1495,7 @@ def test_parsers():
         "100000"    # Should be 100000
     ]
     
-    for case in test_cases:
-        value, priority = detect_language_and_convert(case)
-        print(f"{case} -> {value} (priority {priority})")
-
-#######################################---mages-gambit---#############################################
+#######################################---MAGES_GAMBIT---#############################################
 def solve_mages_gambit(intel, reserve, fronts, stamina):
     """
     Solve the mage's gambit problem using dynamic programming.
