@@ -148,6 +148,7 @@ def solve_subway_scheduling(edges, tasks, s0):
     if not tasks:
         return 0, 0, []
     
+    # Collect all relevant stations: starting station, task stations, and edge stations
     stations = set()
     stations.add(s0)
     for task in tasks:
@@ -160,6 +161,7 @@ def solve_subway_scheduling(edges, tasks, s0):
     n_stations = len(station_list)
     station_to_idx = {s: i for i, s in enumerate(station_list)}
     
+    # Build the graph as an adjacency list
     graph = [[] for _ in range(n_stations)]
     for s1, s2, c in edges:
         u = station_to_idx[s1]
@@ -167,39 +169,41 @@ def solve_subway_scheduling(edges, tasks, s0):
         graph[u].append((v, c))
         graph[v].append((u, c))
     
-    relevant_stations = set([s0] + [task[2] for task in tasks])
-    relevant_indices = [station_to_idx[s] for s in relevant_stations]
+    # Precompute distances between all relevant stations
+    relevant_stations = list(stations)
     dist_map = {}
     for station in relevant_stations:
         idx = station_to_idx[station]
         dists = dijkstra(graph, idx, n_stations)
-        dist_map[station] = {s: dists[station_to_idx[s]] for s in relevant_stations}
+        # Store distances only to relevant stations
+        dist_map[station] = {}
+        for s in relevant_stations:
+            dist_map[station][s] = dists[station_to_idx[s]]
     
+    # Helper function to get distance between two stations
     def get_distance(u, v):
         return dist_map[u][v]
     
+    # Prepare tasks with original indices and sort by end time
     tasks_with_idx = [(start, end, station, reward, i) 
                       for i, (start, end, station, reward) in enumerate(tasks)]
     tasks_with_idx.sort(key=lambda x: x[1])
     n = len(tasks_with_idx)
     
-    dp = [(-1, float('inf'), -1, -1)] * n
+    # dp[i] = (max_reward, min_fee, prev_index, last_station) for ending at task i
+    dp = [(-1, float('inf'), -1, None) for _ in range(n)]
+    # best_up_to[i] = (max_reward, min_fee, last_station) for tasks up to index i
     best_up_to = [None] * n
     
     for i in range(n):
         start_i, end_i, station_i, reward_i, orig_i = tasks_with_idx[i]
-        best_reward = -1
-        best_fee = float('inf')
-        best_prev = -1
-        best_station = None
         
+        # Option 1: Start from s0 to current task
         cost_from_start = get_distance(s0, station_i)
         if cost_from_start != float('inf'):
-            best_reward = reward_i
-            best_fee = cost_from_start
-            best_prev = -1
-            best_station = station_i
+            dp[i] = (reward_i, cost_from_start, -1, station_i)
         
+        # Find the latest compatible task j (with end_j <= start_i)
         left, right = 0, i-1
         j_index = -1
         while left <= right:
@@ -210,64 +214,68 @@ def solve_subway_scheduling(edges, tasks, s0):
             else:
                 right = mid - 1
         
-        if j_index != -1:
-            best_j = best_up_to[j_index]
-            if best_j is not None:
-                reward_j, fee_j, station_j = best_j
-                transport_cost = get_distance(station_j, station_i)
-                if transport_cost != float('inf'):
-                    total_reward = reward_j + reward_i
-                    total_fee = fee_j + transport_cost
-                    if total_reward > best_reward or (total_reward == best_reward and total_fee < best_fee):
-                        best_reward = total_reward
-                        best_fee = total_fee
-                        best_prev = j_index
-                        best_station = station_i
+        # If there is a compatible task, use the best solution up to j_index
+        if j_index != -1 and best_up_to[j_index] is not None:
+            best_reward_j, best_fee_j, best_station_j = best_up_to[j_index]
+            transport_cost = get_distance(best_station_j, station_i)
+            if transport_cost != float('inf'):
+                total_reward = best_reward_j + reward_i
+                total_fee = best_fee_j + transport_cost
+                # Update if this gives a better reward or lower fee
+                if total_reward > dp[i][0] or (total_reward == dp[i][0] and total_fee < dp[i][1]):
+                    dp[i] = (total_reward, total_fee, j_index, station_i)
         
-        if best_reward != -1:
-            dp[i] = (best_reward, best_fee, best_prev, best_station)
-        
+        # Update best_up_to[i]
         if i == 0:
-            if dp[0][0] != -1:
-                best_up_to[0] = (dp[0][0], dp[0][1], dp[0][3])
+            if dp[i][0] != -1:
+                best_up_to[i] = (dp[i][0], dp[i][1], dp[i][3])
             else:
-                best_up_to[0] = None
+                best_up_to[i] = None
         else:
-            prev_best = best_up_to[i-1]
-            if dp[i][0] == -1:
-                best_up_to[i] = prev_best
-            else:
-                if prev_best is None:
+            # best_up_to[i] is the best between best_up_to[i-1] and dp[i]
+            if best_up_to[i-1] is None:
+                if dp[i][0] != -1:
                     best_up_to[i] = (dp[i][0], dp[i][1], dp[i][3])
                 else:
-                    if dp[i][0] > prev_best[0] or (dp[i][0] == prev_best[0] and dp[i][1] < prev_best[1]):
+                    best_up_to[i] = None
+            else:
+                best_reward_prev, best_fee_prev, best_station_prev = best_up_to[i-1]
+                if dp[i][0] == -1:
+                    best_up_to[i] = best_up_to[i-1]
+                else:
+                    if dp[i][0] > best_reward_prev or (dp[i][0] == best_reward_prev and dp[i][1] < best_fee_prev):
                         best_up_to[i] = (dp[i][0], dp[i][1], dp[i][3])
                     else:
-                        best_up_to[i] = prev_best
+                        best_up_to[i] = best_up_to[i-1]
     
-    best_i = -1
+    # Find the best task considering return cost to s0
     best_reward = -1
     best_fee = float('inf')
+    best_i = -1
     for i in range(n):
-        if dp[i][0] > best_reward or (dp[i][0] == best_reward and dp[i][1] < best_fee):
+        if dp[i][0] == -1:
+            continue
+        return_cost = get_distance(dp[i][3], s0)
+        if return_cost == float('inf'):
+            continue
+        total_fee = dp[i][1] + return_cost
+        if dp[i][0] > best_reward or (dp[i][0] == best_reward and total_fee < best_fee):
             best_reward = dp[i][0]
-            best_fee = dp[i][1]
+            best_fee = total_fee
             best_i = i
     
     if best_i == -1:
         return 0, 0, []
     
-    return_cost = get_distance(dp[best_i][3], s0)
-    best_fee += return_cost
-    
-    path = []
+    # Reconstruct the sequence of tasks
+    selected_indices = []
     current = best_i
     while current != -1:
-        path.append(tasks_with_idx[current][4])
-        current = dp[current][2]
-    path.reverse()
+        selected_indices.append(tasks_with_idx[current][4])  # original index
+        current = dp[current][2]  # move to previous task
+    selected_indices.reverse()
     
-    return best_reward, best_fee, path
+    return best_reward, best_fee, selected_indices
 
 @main_bp.route('/princess-diaries', methods=['POST'])
 def princess_diaries():
@@ -295,6 +303,7 @@ def princess_diaries():
     
     max_reward, min_fee, selected_tasks = solve_subway_scheduling(edges, tasks, starting_station)
     
+    # Sort selected tasks by start time for the schedule
     selected_with_start_time = [(i, tasks[i][0]) for i in selected_tasks]
     selected_with_start_time.sort(key=lambda x: x[1])
     schedule = [task_names[i] for i, _ in selected_with_start_time]
@@ -306,7 +315,6 @@ def princess_diaries():
     }
     
     return jsonify(response)
-
 #########################################---TRADING---###########################################
 class LaTeXFormulaEvaluator:
     def __init__(self):
